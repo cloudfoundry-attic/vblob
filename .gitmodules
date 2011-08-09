@@ -1,0 +1,6 @@
+[submodule "blob_fs/node-mongodb-native"]
+	path = blob_fs/node-mongodb-native
+	url = https://github.com/christkv/node-mongodb-native.git
+[submodule "blob_s3/sax-js"]
+	path = blob_s3/sax-js
+	url = https://github.com/isaacs/sax-js.git
