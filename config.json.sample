@@ -1,0 +1,37 @@
+{
+	"drivers":[
+	  {"fs-sonic" : {
+			"type" : "fs",
+			"option" : {"root" : "/home/sonicwcl/Workspace/data2",
+				   "mds" : { 
+					    "host" : "127.0.0.1",
+					    "port" : "28100",
+					    "db"   : "test2",
+					    "user" : "sonic1",
+					    "pwd"  : "password1" 
+					 }
+				}
+			}
+	  },
+	  {"s3-sonic" : {
+			"type" : "s3",
+			"option" : {
+				"key" : "dummy",
+				"secret" : "dummy"
+				}
+			}
+	  },
+	  {"swift-sonic" : {
+			"type"          : "swift",
+			"option"        : {
+					"username" : "account:user",
+					"apikey"   : "dummy",
+					"auth_url" : "http://IP:PORT/auth/v1.0"
+			}
+	  	}
+	  }
+	],
+	"port" : "8080",
+	"default" : "fs",
+	"logfile" : "/var/vcap/services/blob/instance/log"
+}
