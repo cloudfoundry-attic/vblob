@@ -46,6 +46,7 @@ exports.hmacSha1 = function(options){
 
 exports.sign = function(options){
   options.message = exports.stringToSign(options);
+  //console.log('message to sign: '+options.message);
   return exports.hmacSha1(options);
 };
 

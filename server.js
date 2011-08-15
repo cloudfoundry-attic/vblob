@@ -3,6 +3,7 @@
 */
 var winston = require('winston');
 var express = require("express");
+var s3auth = require('./common/s3-auth');
 var util = require('util');
 var fs = require('fs');
 var drivers = { }; //storing backend driver objects
@@ -103,8 +104,29 @@ if (true) {
   }
 }
 
+var authenticate = function(req,res,next) {
+  //console.log('headers: ' + util.inspect(req.headers));
+  var Authorization = req.headers.Authorization;
+  if (Authorization === undefined)
+    { Authorization = req.headers.authorization; }
+  //console.log('params: ' + req.params);
+  var targets = {};
+  if (req.params !== undefined && req.params.contain !== undefined) { targets.bucket = req.params.contain; }
+  if (req.params !== undefined && req.params[0] !== undefined) { targets.filename = req.params[0]; }
+  targets.query = req.query;
+  //console.log('authorization: ' + Authorization);
+  if (Authorization === undefined || s3auth.validate(config.keyID,config.secretID, req.method.toUpperCase(), targets, req.headers, Authorization) === false ) {
+    res.header('Connection','close');
+    res.statusCode = 401;
+    res.end('{"Code":"Unauthorized","Message":"Signature does not match"}');
+    return;
+  }
+  next();
+};
+
 //TODO: middleware to find proper driver
 var app = express.createServer( );
+app.get('/',authenticate);
 app.get('/',function(req,res) {
   if (req.method === 'HEAD') {
     res.header('Connection','close');
@@ -173,6 +195,7 @@ var general_resp = function (res) {
   };
 };
 
+app.get('/:contain/$', authenticate);
 app.get('/:contain/$', exists_bucket);
 app.get('/:contain/$',function(req,res) {
   res.client_closed = false;
@@ -201,6 +224,7 @@ app.get('/:contain/$',function(req,res) {
   req.driver.list_bucket(req.params.contain,opt,res);
 });
 
+app.get('/:contain/*',authenticate);
 app.get('/:contain/*',exists_bucket);
 app.get('/:contain/*',function(req,res) {
   res.client_closed = false;
@@ -237,6 +261,7 @@ app.get('/:contain/*',function(req,res) {
   req.driver.read_file(req.params.contain, req.params[0], req.headers.range, req.method.toLowerCase(),res,req);
 });
 
+app.put('/:contain/*', authenticate);
 app.put('/:contain/*', exists_bucket);
 app.put('/:contain/*', function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
@@ -277,6 +302,7 @@ app.put('/:contain/*', function(req,res) {
   }
 });
 
+app.put('/:contain', authenticate);
 app.put('/:contain', non_exists_bucket);
 app.put('/:contain',function(req,res) {
   BucketToDriverMap[req.params.contain] = { "driver" : default_driver, "book_keeping" : true};
@@ -287,6 +313,7 @@ app.put('/:contain',function(req,res) {
   setTimeout(remove_entry,6000,req.params.contain); //still have race condition
 });
 
+app.delete('/:contain/*',authenticate);
 app.delete('/:contain/*',exists_bucket);
 app.delete('/:contain/*',function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
@@ -299,6 +326,7 @@ app.delete('/:contain/*',function(req,res) {
   req.driver.delete_file(req.params.contain,req.params[0],res);
 });
 
+app.delete('/:contain', authenticate);
 app.delete('/:contain', exists_bucket);
 app.delete('/:contain',function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {

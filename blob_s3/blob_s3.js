@@ -5,12 +5,12 @@
   Need winston module for logging
 */
 var winston = require('winston');
-var knox = require('./index.js');
+var knox = require('../common/index.js');
 var fs  = require('fs');
 var util = require('util');
 var sax = require('./sax-js/lib/sax');
 var url = require('url');
-var mime = require('./lib/knox/mime');
+var mime = require('../common/lib/knox/mime');
 
 function parse_xml(parser,resp)
 {
