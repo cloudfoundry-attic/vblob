@@ -5,12 +5,12 @@
   Need winston module for logging
 */
 var winston = require('winston');
-var knox = require('./index.js');
+var knox = require('../common/index.js');
 var fs  = require('fs');
 var util = require('util');
 var sax = require('./sax-js/lib/sax');
 var url = require('url');
-var mime = require('./lib/knox/mime');
+var mime = require('../common/lib/knox/mime');
 
 function parse_xml(parser,resp)
 {
@@ -251,7 +251,7 @@ S3_blob.prototype.list_container = function (container,opt,resp)
   req.end();
 };
 
-var S3_Driver = module.exports = function S3_Driver(client) {
+var S3_Driver = function S3_Driver(client) {
   this.client = client;
 };
 

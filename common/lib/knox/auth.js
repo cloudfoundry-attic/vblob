@@ -46,6 +46,7 @@ exports.hmacSha1 = function(options){
 
 exports.sign = function(options){
   options.message = exports.stringToSign(options);
+  //console.log('message to sign: '+options.message);
   return exports.hmacSha1(options);
 };
 
@@ -88,7 +89,7 @@ exports.stringToSign = function(options){
       options.verb
     , options.md5
     , options.contentType
-    , options.date.toUTCString()
+    , options.date//.toUTCString()
     , headers + options.resource
   ].join('\n');
 };

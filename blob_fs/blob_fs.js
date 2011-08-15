@@ -858,8 +858,8 @@ function render_containers(dirs,resp,fb)
     output += '{"Buckets":{"Owner":{}';//empty owner information
     output += ',"Bucket":[';
     for (var i = 0,j=0; i < dirs.length; i++) {
-      if (j > 0) { output += ','; }
       if (dates[i] === null)  { continue; }
+      if (j > 0) { output += ','; }
       j = j+1;
       output += '{';
       output += ('"Name":"'+dirs[i]+'"');
@@ -876,7 +876,7 @@ function render_containers(dirs,resp,fb)
 }
 
 //=======================================================
-var FS_Driver = module.exports = function(root_path, mds_cred,callback) {
+var FS_Driver = function(root_path, mds_cred,callback) {
   var this1 = this;
   var client = new FS_blob(root_path,mds_cred, function(obj) {
     this1.client = obj;
