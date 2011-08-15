@@ -44,7 +44,7 @@ var driver_list_buckets = function(obj) {
     if (buckets.push === undefined) { buckets = [buckets];}
     for (var idx = 0, leng = buckets.length; idx < leng; ++idx) {
       var dr = BucketToDriverMap[buckets[idx].Name];
-      if (dr === undefined || driver_order[dr.driver.driver_key] > driver_order[resp.driver.driver_key]) {
+      if (dr === undefined || driver_order[dr.driver.driver_key] >= driver_order[resp.driver.driver_key]) {
         BucketToDriverMap[buckets[idx].Name] = {"driver" : resp.driver, "CreationDate" :buckets[idx].CreationDate};
       }
     }
