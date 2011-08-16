@@ -105,7 +105,7 @@ if (true) {
   }
 }
 
-var error_resp = function (res,statusCode, res_body)
+var server_resp = function (res,statusCode, res_body)
 {
   res.header('Connection','close');
   res.statusCode = statusCode;
@@ -129,7 +129,7 @@ var authenticate = function(req,res,next) {
   //console.log('authorization: ' + Authorization);
   if (Authorization === undefined || s3auth.validate(config.keyID,config.secretID, req.method.toUpperCase(), targets, req.headers, Authorization) === false ) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"Unauthorized","Message":"Signature does not match"}}'),0);
-    error_resp(res,401,res_body);
+    server_resp(res,401,res_body);
     return;
   }
   next();
@@ -145,27 +145,28 @@ app.get('/',function(req,res) {
     return;
   }
   //driver.list_buckets(req,res);
-  res.writeHeader(200, { 'Connection' :'close', 'Content-Type' : 'application/json', 'Date' : new Date().toString() } );
-  res.write('{"Buckets" : [');
+  var res_body = {};
+  var obj1 = {"Owner": { 
+    "ID" : config.keyID,
+    "DisplayName" : config.keyID
+  } };
+  var buckets = {"Bucket" : [] };
   var keys = Object.keys(BucketToDriverMap);
-  for (var i = 0, j=0, len = keys.length; i < len; ++i) {
-    if (j > 0) { res.write(','); }
+  for (var i = 0, len = keys.length; i < len; ++i) {
     if (BucketToDriverMap[keys[i]].book_keeping === true) { continue; }
-    j++;
-    res.write('{"Name":"'+keys[i]+'"');
-    if (BucketToDriverMap[keys[i]].CreationDate)
-    { res.write(',"CreationDate":"'+BucketToDriverMap[keys[i]].CreationDate+'"}');}
-    else  { res.write('}'); }
+    buckets.Bucket.push( { "Name" : keys[i], "CreationDate" : BucketToDriverMap[keys[i]].CreationDate} );
   }
-  res.write(']}');
-  res.end();
+  obj1.Buckets = buckets;
+  res_body.ListAllMyBucketsResult = obj1;
+  res_body = j2x.json2xml(res_body,0,"http://s3.amazonaws.com/doc/2006-03-01");
+  server_resp(res,200,res_body);
 });
 
 var exists_bucket = function(req,res,next) {
   var bucket = BucketToDriverMap[req.params.contain];
   if (bucket === undefined) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"BucketNotFound","Message":"No Such Bucket"}}'),0);
-    error_resp(res,404,res_body);
+    server_resp(res,404,res_body);
     return;
   }
   req.driver = bucket.driver;
@@ -176,7 +177,7 @@ var non_exists_bucket = function(req,res,next) {
   var bucket = BucketToDriverMap[req.params.contain];
   if (bucket && bucket.driver !== default_driver) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"BucketExists","Message":"Can not create a bucket with existing name"}}'),0);
-    error_resp(res,409,res_body);
+    server_resp(res,409,res_body);
     return;
   }
   next();
@@ -224,7 +225,7 @@ app.get('/:contain$',function(req,res) {
   }
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"SlowDown","Message":"Bucket temporarily unavailable"}}'),0);
-    error_resp(res,503,res_body);
+    server_resp(res,503,res_body);
     return;
   }
   var opt = {};
@@ -247,7 +248,7 @@ app.get('/:contain/*',function(req,res) {
   });
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"SlowDown","Message":"Bucket temporarily unavailable"}}'),0);
-    error_resp(res,503,res_body);
+    server_resp(res,503,res_body);
     return;
   }
   res.resp_send = false;
@@ -285,7 +286,7 @@ app.put('/:contain/*', exists_bucket);
 app.put('/:contain/*', function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"SlowDown","Message":"Bucket temporarily unavailable"}}'),0);
-    error_resp(res,503,res_body);
+    server_resp(res,503,res_body);
     return;
   }
   //could put following handling to middle ware
@@ -299,14 +300,14 @@ app.put('/:contain/*', function(req,res) {
     BucketToDriverMap[src_buck].book_keeping === true )
     {
       var res_body2 = j2x.json2xml(JSON.parse('{"Error":{"Code":"BucketNotFound","Message":"Source bucket not found"}}'),0);
-      error_resp(res,404,res_body2);
+      server_resp(res,404,res_body2);
       return;
     }
     //copy object, for now assume intra backend
     var driver2 = BucketToDriverMap[src_buck].driver;
     if ((driver2 !== req.driver)) {
       var res_body3 = j2x.json2xml(JSON.parse('{"Error":{"Code":"NotImplemented","Message":"Copying across backends is not implemented"}}'),0);
-      error_resp(res,501,res_body3);
+      server_resp(res,501,res_body3);
       return;
     }
     res.resp_end = general_resp(res);
@@ -334,7 +335,7 @@ app.delete('/:contain/*',exists_bucket);
 app.delete('/:contain/*',function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"SlowDown","Message":"Bucket temporarily unavailable"}}'),0);
-    error_resp(res,503,res_body);
+    server_resp(res,503,res_body);
     return;
   }
   res.resp_end = general_resp(res);
@@ -346,7 +347,7 @@ app.delete('/:contain', exists_bucket);
 app.delete('/:contain',function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"BucketNotFound","Message":"No Such Bucket"}}'),0);
-    error_resp(res,404,res_body);
+    server_resp(res,404,res_body);
     return;
   }
   BucketToDriverMap[req.params.contain].book_keeping = true;

@@ -29,7 +29,7 @@ function j2x(src,lev,namespace)
       var lev2 = lev,bit=0;
       while (lev2 > 0) {
         if (lev2 % 2 === 1) { dest += indent_level[bit]; }
-        lev2 /= 2; bit += 1;
+        lev2 = (lev2 >> 1); bit += 1;
       }
       dest += '<' + keys[idx];
       if (lev === 0 && namespace !== undefined) {
