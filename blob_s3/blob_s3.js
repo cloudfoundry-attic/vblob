@@ -251,7 +251,7 @@ S3_blob.prototype.list_container = function (container,opt,resp)
   req.end();
 };
 
-var S3_Driver = module.exports = function S3_Driver(client) {
+var S3_Driver = function S3_Driver(client) {
   this.client = client;
 };
 

@@ -876,7 +876,7 @@ function render_containers(dirs,resp,fb)
 }
 
 //=======================================================
-var FS_Driver = module.exports = function(root_path, mds_cred,callback) {
+var FS_Driver = function(root_path, mds_cred,callback) {
   var this1 = this;
   var client = new FS_blob(root_path,mds_cred, function(obj) {
     this1.client = obj;
