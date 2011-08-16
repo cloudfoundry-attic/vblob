@@ -27,8 +27,9 @@ module.exports.validate = function(keyID, secretID, method, targets, headers, si
     , secret: secretID
     , verb: method
     , md5 : content_md5
+    , contentType: content_type
     , date: date
-    , resource: auth.canonicalizeResource((targets.bucket===undefined || targets.bucket === null)?'/':(targets.filename ?/* join('/', targets.bucket, targets.filename)*/ '/'+targets.bucket+'/'+targets.filename+utils.to_query_string(targets.query):join('/',targets.bucket)+'/'+utils.to_query_string(targets.query)))
+    , resource: auth.canonicalizeResource((targets.bucket===undefined || targets.bucket === null)?'/':(targets.filename ?/* join('/', targets.bucket, targets.filename)*/ '/'+targets.bucket+'/'+targets.filename+utils.to_query_string(targets.query):join('/',targets.bucket)+utils.to_query_string(targets.query)))
     , contentType: content_type
     , amazonHeaders: auth.canonicalizeHeaders(headers)
   });

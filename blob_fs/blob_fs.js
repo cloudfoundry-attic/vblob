@@ -858,8 +858,8 @@ function render_containers(dirs,resp,fb)
     output += '{"Buckets":{"Owner":{}';//empty owner information
     output += ',"Bucket":[';
     for (var i = 0,j=0; i < dirs.length; i++) {
-      if (j > 0) { output += ','; }
       if (dates[i] === null)  { continue; }
+      if (j > 0) { output += ','; }
       j = j+1;
       output += '{';
       output += ('"Name":"'+dirs[i]+'"');

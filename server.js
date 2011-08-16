@@ -105,7 +105,7 @@ if (true) {
   }
 }
 
-var common_resp = function (res,statusCode, res_body)
+var error_resp = function (res,statusCode, res_body)
 {
   res.header('Connection','close');
   res.statusCode = statusCode;
@@ -129,7 +129,7 @@ var authenticate = function(req,res,next) {
   //console.log('authorization: ' + Authorization);
   if (Authorization === undefined || s3auth.validate(config.keyID,config.secretID, req.method.toUpperCase(), targets, req.headers, Authorization) === false ) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"Unauthorized","Message":"Signature does not match"}}'),0);
-    common_resp(res,401,res_body);
+    error_resp(res,401,res_body);
     return;
   }
   next();
@@ -165,7 +165,7 @@ var exists_bucket = function(req,res,next) {
   var bucket = BucketToDriverMap[req.params.contain];
   if (bucket === undefined) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"BucketNotFound","Message":"No Such Bucket"}}'),0);
-    common_resp(res,404,res_body);
+    error_resp(res,404,res_body);
     return;
   }
   req.driver = bucket.driver;
@@ -176,7 +176,7 @@ var non_exists_bucket = function(req,res,next) {
   var bucket = BucketToDriverMap[req.params.contain];
   if (bucket && bucket.driver !== default_driver) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"BucketExists","Message":"Can not create a bucket with existing name"}}'),0);
-    common_resp(res,409,res_body);
+    error_resp(res,409,res_body);
     return;
   }
   next();
@@ -197,11 +197,11 @@ var general_resp = function (res) {
     var headers = res.resp_header;
     headers.Connection = "close";
     if (headers.connection) { delete headers.Connection; }
-    headers["content-type"] = "application/xml";
     var res_body = "";
     if (res.resp_body) {
       res_body = j2x.json2xml(res.resp_body,0,res.resp_code >= 300?undefined:"http://s3.amazonaws.com/doc/2006-03-01");
       headers["content-length"] = res_body.length;
+      headers["content-type"] = "application/xml";
     }
     res.writeHeader(res.resp_code,headers);
     if (res.resp_body)
@@ -210,9 +210,9 @@ var general_resp = function (res) {
   };
 };
 
-app.get('/:contain/$', authenticate);
-app.get('/:contain/$', exists_bucket);
-app.get('/:contain/$',function(req,res) {
+app.get('/:contain$', authenticate);
+app.get('/:contain$', exists_bucket);
+app.get('/:contain$',function(req,res) {
   res.client_closed = false;
   req.connection.addListener('close', function () {
     res.client_closed = true;
@@ -224,7 +224,7 @@ app.get('/:contain/$',function(req,res) {
   }
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"SlowDown","Message":"Bucket temporarily unavailable"}}'),0);
-    common_resp(res,503,res_body);
+    error_resp(res,503,res_body);
     return;
   }
   var opt = {};
@@ -247,7 +247,7 @@ app.get('/:contain/*',function(req,res) {
   });
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"SlowDown","Message":"Bucket temporarily unavailable"}}'),0);
-    common_resp(res,503,res_body);
+    error_resp(res,503,res_body);
     return;
   }
   res.resp_send = false;
@@ -266,9 +266,15 @@ app.get('/:contain/*',function(req,res) {
     var headers = res.resp_header;
     headers.Connection = "close";
     if (headers.connection) { delete headers.Connection; }
+    var res_body = "";
+    if (res.resp_body) {
+      res_body = j2x.json2xml(res.resp_body,0,res.resp_code >= 300?undefined:"http://s3.amazonaws.com/doc/2006-03-01");
+      headers["content-length"] = res_body.length;
+      headers["content-type"] = "application/xml";
+    }
     res.writeHeader(res.resp_code,headers);
     if (res.resp_body)
-    { res.write(JSON.stringify(res.resp_body)); }
+    { res.write(res_body/*JSON.stringify(res.resp_body)*/); }
     res.end();
   };
   req.driver.read_file(req.params.contain, req.params[0], req.headers.range, req.method.toLowerCase(),res,req);
@@ -279,7 +285,7 @@ app.put('/:contain/*', exists_bucket);
 app.put('/:contain/*', function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"SlowDown","Message":"Bucket temporarily unavailable"}}'),0);
-    common_resp(res,503,res_body);
+    error_resp(res,503,res_body);
     return;
   }
   //could put following handling to middle ware
@@ -293,14 +299,14 @@ app.put('/:contain/*', function(req,res) {
     BucketToDriverMap[src_buck].book_keeping === true )
     {
       var res_body2 = j2x.json2xml(JSON.parse('{"Error":{"Code":"BucketNotFound","Message":"Source bucket not found"}}'),0);
-      common_resp(res,404,res_body2);
+      error_resp(res,404,res_body2);
       return;
     }
     //copy object, for now assume intra backend
     var driver2 = BucketToDriverMap[src_buck].driver;
     if ((driver2 !== req.driver)) {
       var res_body3 = j2x.json2xml(JSON.parse('{"Error":{"Code":"NotImplemented","Message":"Copying across backends is not implemented"}}'),0);
-      common_resp(res,501,res_body3);
+      error_resp(res,501,res_body3);
       return;
     }
     res.resp_end = general_resp(res);
@@ -328,7 +334,7 @@ app.delete('/:contain/*',exists_bucket);
 app.delete('/:contain/*',function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"SlowDown","Message":"Bucket temporarily unavailable"}}'),0);
-    common_resp(res,503,res_body);
+    error_resp(res,503,res_body);
     return;
   }
   res.resp_end = general_resp(res);
@@ -340,7 +346,7 @@ app.delete('/:contain', exists_bucket);
 app.delete('/:contain',function(req,res) {
   if (BucketToDriverMap[req.params.contain].book_keeping === true) {
     var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"BucketNotFound","Message":"No Such Bucket"}}'),0);
-    common_resp(res,404,res_body);
+    error_resp(res,404,res_body);
     return;
   }
   BucketToDriverMap[req.params.contain].book_keeping = true;
