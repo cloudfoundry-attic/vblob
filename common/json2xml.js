@@ -10,7 +10,7 @@ function replaceSpecialChar(s){
   return s;
 }
 
-function j2x(src,lev,namespace)
+function j2x(src,lev,namespace,indent)
 {
   var dest = "";
   if (lev === 0) { dest += '<?xml version="1.0" encoding="UTF-8"?>'; }
@@ -20,13 +20,14 @@ function j2x(src,lev,namespace)
     return dest;
   }
   var keys = Object.keys(src);
-  if (keys.length > 0) { dest += '\n'; }
+  if (indent !== undefined && keys.length > 0) { dest += '\n'; }
   for (var idx = 0; idx < keys.length; idx++)
   {
     var val = src[keys[idx]];
     if (val.push === undefined) { val = [val]; }
     for (var idx2 = 0; idx2 < val.length; idx2++) {
       var lev2 = lev,bit=0;
+      if (indent === undefined) { lev2 = 0; }
       while (lev2 > 0) {
         if (lev2 % 2 === 1) { dest += indent_level[bit]; }
         lev2 = (lev2 >> 1); bit += 1;
@@ -38,12 +39,13 @@ function j2x(src,lev,namespace)
       dest += '>';
       dest += j2x(val[idx2],lev+1);
       lev2 = lev; bit=0;
-      if (dest.charAt(dest.length-1) !== '\n') { lev2 = 0; }
+      if (indent === undefined || dest.charAt(dest.length-1) !== '\n') { lev2 = 0; }
       while (lev2 > 0) {
         if (lev2 % 2 === 1) { dest += indent_level[bit]; }
         lev2 = (lev2 >> 1); bit += 1;
       }
-      dest += '</' + keys[idx] + '>\n';
+      dest += '</' + keys[idx] + '>';
+      if (indent !== undefined) { dest += '\n'; }
     }
   }
   return dest;

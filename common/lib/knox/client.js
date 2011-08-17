@@ -79,7 +79,7 @@ Client.prototype.request = function(method, targets, headers){
     , secret: this.secret
     , verb: method
     , md5 : content_md5
-    , date: date
+    , date: date.toUTCString()
     , resource: auth.canonicalizeResource((targets.bucket===undefined || targets.bucket === null)?'/':(targets.filename ?/* join('/', targets.bucket, targets.filename)*/ '/'+targets.bucket+'/'+targets.filename+utils.to_query_string(targets.query):join('/',targets.bucket)+'/'+utils.to_query_string(targets.query)))
     , contentType: headers['Content-Type']
     , amazonHeaders: auth.canonicalizeHeaders(headers)
