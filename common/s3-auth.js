@@ -18,10 +18,9 @@ module.exports.validate = function(keyID, secretID, method, targets, headers, si
   }
   // Authorization header
   //resource: "/" for listing buckets; otherwise bucket or file level operations
-  var date = headers.Date;
+  var date = headers.Date; //use string form from header, no transformation
   if (date === undefined) { date = headers.date; }
   if (date === undefined) { return false; }
-  date = new Date(date);
   var Authorization = auth.authorization({
       key: keyID
     , secret: secretID

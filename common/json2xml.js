@@ -41,7 +41,7 @@ function j2x(src,lev,namespace)
       if (dest.charAt(dest.length-1) !== '\n') { lev2 = 0; }
       while (lev2 > 0) {
         if (lev2 % 2 === 1) { dest += indent_level[bit]; }
-        lev2 /= 2; bit += 1;
+        lev2 = (lev2 >> 1); bit += 1;
       }
       dest += '</' + keys[idx] + '>\n';
     }
