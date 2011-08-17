@@ -89,7 +89,7 @@ exports.stringToSign = function(options){
       options.verb
     , options.md5
     , options.contentType
-    , options.date.toUTCString()
+    , options.date//.toUTCString()
     , headers + options.resource
   ].join('\n');
 };
