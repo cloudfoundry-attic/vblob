@@ -69,6 +69,7 @@ function general_handler(cl,req,resp,head)
   if (head === null || head === undefined) { head = false; }
   req.on('response',function(res) {
     res.setEncoding('utf8');
+    res.dest_closed = false;
     resp.resp_header = res.headers; resp.resp_code = res.statusCode;
     var parser = null;
     //special handling for redirect
@@ -87,7 +88,12 @@ function general_handler(cl,req,resp,head)
       if (resp.client_closed === true) { winston.log('warn',(new Date())+' - client connection closed!'); res.destroy(); if (parser) { parser=null;  } resp.resp_end();return; }
       parser.write(chunk);
     });
-    res.on('end',function() { if (parser !== null) { parser.close(); } else { resp.resp_end();} }); //parse.end event will trigger response
+    res.connection.on('close', function () {
+      if (res.dest_closed === true) { return; }
+      res.dest_closed = true;
+      if (parser !== null) { parser.close(); } else { resp.resp_end();} 
+    });
+    res.on('end',function() { if (res.dest_closed === true) { return; } res.dest_closed = true; if (parser !== null) { parser.close(); } else { resp.resp_end();} }); //parse.end event will trigger response
   }).on('error',function(err) {
     resp.resp_header = {'Connection':'close'};
     resp.resp_code = 500;

@@ -13,14 +13,14 @@ function replaceSpecialChar(s){
 function j2x(src,lev,namespace,indent)
 {
   var dest = "";
-  if (lev === 0) { dest += '<?xml version="1.0" encoding="UTF-8"?>'; }
+  if (lev === 0) { dest += '<?xml version="1.0" encoding="UTF-8"?>\n'; }
   if (src === null || src === undefined) { return dest; }
   if (typeof(src) !== 'object') {
     dest += replaceSpecialChar(src);
     return dest;
   }
   var keys = Object.keys(src);
-  if (indent !== undefined && keys.length > 0) { dest += '\n'; }
+  if (indent !== undefined && lev > 0 && keys.length > 0) { dest += '\n'; }
   for (var idx = 0; idx < keys.length; idx++)
   {
     var val = src[keys[idx]];

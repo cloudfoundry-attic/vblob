@@ -13,7 +13,7 @@ var default_driver = null; //the driver object for creating a new bucket
 var BucketToDriverMap = { }; //bucket name to driver map
 var argv = process.argv;
 var conf_file = "./config.json";
-
+var XMLNS = "http://s3.amazonaws.com/doc/2006-03-01/";
 for (var idx = 0; idx < argv.length; idx++)
 {
   if (argv[idx] === "-f" && idx+1 < argv.length)
@@ -109,7 +109,7 @@ var server_resp = function (res,statusCode, res_body)
 {
   res.header('Connection','close');
   res.statusCode = statusCode;
-  res.header('Content-Length',res_body.length);
+  //res.header('Content-Length',res_body.length);
   res.header('Content-Type', 'application/xml');
   res.header('Date', new Date().toUTCString());
   res.header('Server', 'blob gw');
@@ -158,7 +158,7 @@ app.get('/',function(req,res) {
   }
   obj1.Buckets = buckets;
   res_body.ListAllMyBucketsResult = obj1;
-  res_body = j2x.json2xml(res_body,0,"http://s3.amazonaws.com/doc/2006-03-01");
+  res_body = j2x.json2xml(res_body,0,XMLNS);
   server_resp(res,200,res_body);
 });
 
@@ -200,8 +200,8 @@ var general_resp = function (res) {
     if (headers.connection) { delete headers.Connection; }
     var res_body = "";
     if (res.resp_body) {
-      res_body = j2x.json2xml(res.resp_body,0,res.resp_code >= 300?undefined:"http://s3.amazonaws.com/doc/2006-03-01");
-      headers["content-length"] = res_body.length;
+      res_body = j2x.json2xml(res.resp_body,0,res.resp_code >= 300?undefined:XMLNS);
+      //headers["content-length"] = res_body.length;
       headers["content-type"] = "application/xml";
     }
     res.writeHeader(res.resp_code,headers);
@@ -269,7 +269,7 @@ app.get('/:contain/*',function(req,res) {
     if (headers.connection) { delete headers.Connection; }
     var res_body = "";
     if (res.resp_body) {
-      res_body = j2x.json2xml(res.resp_body,0,res.resp_code >= 300?undefined:"http://s3.amazonaws.com/doc/2006-03-01");
+      res_body = j2x.json2xml(res.resp_body,0,res.resp_code >= 300?undefined:XMLNS);
       headers["content-length"] = res_body.length;
       headers["content-type"] = "application/xml";
     }
