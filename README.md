@@ -12,6 +12,10 @@
   - S3 compatibility
   - virtualized buckets (automatically mapping buckets to different backends)
 
+## Documentation
+
+  - see [doc](doc) directory
+
 ## Authors
 
   - Sonic Wang (wangs@vmware.com)
@@ -46,34 +50,37 @@
 
 The above file contains a stringtified JSON object describing supported driver details.
 
-	{
-		"drivers":[
-		  {"fs-sonic" : {
-				"type" : "fs",
-				"option" : {"root" : "/home/sonicwcl/Workspace/data2",
-					   "mds" : { 
-						    "host" : "127.0.0.1",
-						    "port" : "28100",
-						    "db"   : "test2",
-						    "user" : "sonic1",
-						    "pwd"  : "password1" 
-						 }
-					}
-				}
-		  },
-		  {"s3-sonic" : {
-				"type" : "s3",
-				"option" : {
-					"key" : "dummy",
-					"secret" : "dummy"
-					}
-				}
-		  }
-		],
-		"port" : "8080",
-		"default" : "fs",
-		"logfile" : "/tmp/log"
-	}
+    {
+      "drivers":[
+        {"fs-sonic" : {
+          "type" : "fs",
+          "option" : {"root" : "/home/sonicwcl/Workspace/data2",
+               "mds" : {
+                  "host" : "127.0.0.1",
+                  "port" : "28100",
+                  "db"   : "test2",
+                  "user" : "sonic1",
+                  "pwd"  : "password1"
+               }
+            }
+          }
+        },
+        {"s3-sonic" : {
+          "type" : "s3",
+          "option" : {
+            "key" : "dummy",
+            "secret" : "dummy"
+            }
+          }
+        }
+      ],
+      "port" : "8080",
+      "default" : "fs",
+      "logfile" : "/var/vcap/services/blob/instance/log",
+      "keyID" : "dummy",
+      "secretID" : "dummy"
+    }
+
 
 Each driver must specify its type. Currently `fs` and `s3` are supported. The `option` value contains the neccessary information a driver needs. For `fs`, the value contains root directory for storing blobs; host/port/db/user/password for mongodb. For `s3`, the values contains a pair of s3 key and secret. `default` means the default driver type. When there are naming conflicts, the driver appears first in the array will be chosen. `logfile` specifies the path to log file.
 
