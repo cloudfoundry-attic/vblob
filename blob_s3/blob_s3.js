@@ -11,6 +11,8 @@ var util = require('util');
 var sax = require('./sax-js/lib/sax');
 var url = require('url');
 var mime = require('../common/lib/knox/mime');
+var dns = require('dns');
+var net = require('net');
 
 function parse_xml(parser,resp)
 {
@@ -318,17 +320,16 @@ S3_Driver.prototype.delete_bucket = function(container,resp)
 };
 
 S3_Driver.prototype.pingDest = function(callback) {
-  var dns = require('dns');
   dns.resolve(this.client.client.endpoint, function(err,addr) {
     if (err) {
       winston.log('error',(new Date())+' - Cannot resolve s3 domain');
       callback(err);
     } else {
-      var net = require('net');
       var sock = new net.Socket();
       sock.connect(80,addr[0]);
-      sock.on('connect',function() { callback(); } );
+      sock.on('connect',function() { sock.destroy(); callback(); } );
       sock.on('error',function(err) {
+        sock.destroy();
         winston.log('error',(new Date())+' - Cannot connect to s3');
         callback(err);
       });
