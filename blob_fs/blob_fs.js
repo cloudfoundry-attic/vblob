@@ -5,9 +5,9 @@
   Set the root dir of the blob, e.g.: var fb = new FS_blob("/mnt/sdb1/tmp");
   A mongo db service is needed for storing meta data.
   start a mongod process, and create a user id/pwd
-  Need winston module for logging
+  Need logger module for logging
 */
-var winston = require('winston');
+var logger = require('../server').logger;
 var fs = require('fs');
 var Path = require('path');
 var crypto = require('crypto');
@@ -96,13 +96,13 @@ function FS_blob(root_path,mds_cred,callback)  //fow now no encryption for fs
   var db = new Db(mds_cred.db, new Server(host, port, {}), {native_parser:true});
   db.open(function(err, db) {
     if (err) {
-      winston.log('error',(new Date())+' - Please make sure mongodb host and port are correct!');
-      throw err;
+      logger.log('error',(new Date())+' - Please make sure mongodb host and port are correct!');
+      if (callback) { callback(this1,err);  return; }
     }
     db.authenticate(mds_cred.user,mds_cred.pwd,function(err,res) {
-      if (!err) { winston.log('info',(new Date())+" - connectd to mongo");} else {
-        winston.log('error',(new Date())+' - Please use correct credentials!');
-        throw err;
+      if (!err) { logger.log('info',(new Date())+" - connectd to mongo");} else {
+        logger.log('error',(new Date())+' - Please use correct credentials!');
+        if (callback) { callback(this1,err); return; }
       }
       this1.MDS = db;
       if (callback) { callback(this1); }
@@ -115,11 +115,11 @@ FS_blob.prototype.create_container = function(container,resp)
   var c_path = this.root_path + "/" + container;
   if (Path.existsSync(c_path) === false)
   {
-    winston.log('debug',(new Date())+" - path "+c_path+" does not exist! Let's create one");
+    logger.log('debug',(new Date())+" - path "+c_path+" does not exist! Let's create one");
     fs.mkdirSync(c_path,"0777");
   } else
   {
-    winston.log('debug',(new Date())+" - path "+c_path+" exists!");
+    logger.log('debug',(new Date())+" - path "+c_path+" exists!");
   }
   resp.resp_code = 200;
   var header = common_header();
@@ -134,7 +134,7 @@ FS_blob.prototype.create_container_meta = function(container,resp,fb)
 {
   var dTime = new Date();
   fb.MDS.collection(container, {safe:true},function(err,coll) {
-    if (coll) {winston.log('debug',"container "+container+" exists!");
+    if (coll) {logger.log('debug',"container "+container+" exists!");
       resp.resp_code = 200;
       var header = common_header();
       delete header["content-type"];
@@ -145,7 +145,7 @@ FS_blob.prototype.create_container_meta = function(container,resp,fb)
       return;
     }
     fb.MDS.createCollection(container, function (err,col) {
-      if (err) { winston.log('error',(new Date())+" - container creation error! "+err);
+      if (err) { logger.log('error',(new Date())+" - container creation error! "+err);
         error_msg(500,"InternalError",err,resp); resp.resp_end();
         return;
       }
@@ -155,13 +155,13 @@ FS_blob.prototype.create_container_meta = function(container,resp,fb)
           "vblob_update_time" : dTime.toString()
         }, {safe:true}, function (err, item) {
         if (!err) {
-          winston.log('debug'+(new Date())+" - Inserted item "+util.inspect(item)+" to db");
+          logger.log('debug'+(new Date())+" - Inserted item "+util.inspect(item)+" to db");
           col.ensureIndex("vblob_file_name", function(err,resp) { } );
           col.ensureIndex("vblob_container_name", function(err,resp) {} ); //for quickly locating collection info
           fb.create_container(container,resp);
         }
         else {
-          winston.log('error',(new Date())+" - Insertion failed for container "+container);
+          logger.log('error',(new Date())+" - Insertion failed for container "+container);
           error_msg(500,"InternalError",err,resp); resp.resp_end();
           fb.MDS.dropCollection(container, function(err,result) {} );
         }
@@ -172,13 +172,13 @@ FS_blob.prototype.create_container_meta = function(container,resp,fb)
 
 FS_blob.prototype.delete_container_meta = function(container,resp)
 {
-  winston.log('debug',(new Date())+" - deleting "+container);
+  logger.log('debug',(new Date())+" - deleting "+container);
   this.MDS.dropCollection(container,function (err,result) {
     if (err) {
-      winston.log("error",(new Date())+" - deleting container "+container+" err! "+err);
+      logger.log("error",(new Date())+" - deleting container "+container+" err! "+err);
       error_msg(500,"InternalError",err,resp); resp.resp_end(); return;
     }
-    else { winston.log("debug",(new Date())+" - deleted container "+container); }
+    else { logger.log("debug",(new Date())+" - deleted container "+container); }
     var header = common_header();
     delete header["content-type"];
     resp.resp_code = 204; resp.resp_header = header;
@@ -210,7 +210,7 @@ FS_blob.prototype.delete_container = function(container,resp,fb)
 function remove_uploaded_file(fdir_path,esp_name) //folder and file name
 {
   fs.unlink(fdir_path+"/"+esp_name,function(err) {
-    winston.log('error',(new Date())+" - Error in deleting upload file: " + err);
+    logger.log('error',(new Date())+" - Error in deleting upload file: " + err);
     fs.rmdir(fdir_path,function(err2) {});
   });
 }
@@ -220,7 +220,7 @@ FS_blob.prototype.create_file = function (container,filename,data,resp,fb)
   if (resp === undefined) { resp = null; }
   var c_path = this.root_path + "/" + container;
   if (!Path.existsSync(c_path)) {
-    winston.log("error",(new Date())+" - no such container");
+    logger.log("error",(new Date())+" - no such container");
     error_msg(404,"NoSuchBucket","No such bucket on disk",resp); resp.resp_end(); return;
   }
   var file_path = c_path + "/" + filename; //complete representation: /container/filename
@@ -228,7 +228,7 @@ FS_blob.prototype.create_file = function (container,filename,data,resp,fb)
   //md5_name.update(file_path);
   md5_name.update(filename); //de-couple from root and container paths
   var name_digest =  md5_name.digest('hex');
-  winston.log('debug',(new Date())+" - create: the md5 hash for string "+filename+" is "+name_digest);
+  logger.log('debug',(new Date())+" - create: the md5 hash for string "+filename+" is "+name_digest);
   var name_dig_pre = name_digest.substr(0,PREFIX_LENGTH);
   var fdir_path = c_path + "/" + name_dig_pre; //actual dir for the file  /container/hashprefix/
   if (!Path.existsSync(fdir_path)) { //create such folder
@@ -240,7 +240,7 @@ FS_blob.prototype.create_file = function (container,filename,data,resp,fb)
   var md5_base64 = null;
   var file_size = 0;
   stream.on("error", function (err) {
-    winston.log('error',(new Date())+" - write stream " + filename+err);
+    logger.log('error',(new Date())+" - write stream " + filename+err);
     if (resp !== null) {
       error_msg(500,"InternalError",err,resp); resp.resp_end();
     }
@@ -255,7 +255,7 @@ FS_blob.prototype.create_file = function (container,filename,data,resp,fb)
     if (resp !== null) {
       error_msg(500,"InternalError",err,resp); resp.resp_end();
     }
-    winston.log('error',(new Date())+' - input stream '+filename+err);
+    logger.log('error',(new Date())+' - input stream '+filename+err);
     data.destroy();
     stream.destroy();
     fs.unlink(fdir_path+"/"+esp_name,function(err) {
@@ -269,7 +269,7 @@ FS_blob.prototype.create_file = function (container,filename,data,resp,fb)
     stream.write(chunk);
   });
   data.on("end", function () {
-    winston.log('debug',(new Date())+' - upload ends');
+    logger.log('debug',(new Date())+' - upload ends');
     data.upload_end = true;
     stream.end();
     stream.destroySoon();
@@ -277,7 +277,7 @@ FS_blob.prototype.create_file = function (container,filename,data,resp,fb)
     //fb.create_file_meta(container,filename,{"vblob_file_etag":md5_etag,"vblob_file_size":file_size},res,fb);
   });
   stream.on("close", function() {
-    winston.log('debug',(new Date())+" - close write stream "+filename);
+    logger.log('debug',(new Date())+" - close write stream "+filename);
     md5_etag = md5_etag.digest('hex');
     var opts = {"vblob_file_etag":md5_etag,"vblob_file_size":file_size};
     var keys = Object.keys(data.headers);
@@ -295,7 +295,7 @@ FS_blob.prototype.create_file = function (container,filename,data,resp,fb)
           if (resp !== null) {
             error_msg(400,"InvalidDigest","The Content-MD5 you specified was invalid.",resp); resp.resp_end();
           }
-          winston.log('error',(new Date())+' - '+filename+' md5 not match: uploaded: '+ md5_base64 + ' specified: ' + data.headers[obj_key]);
+          logger.log('error',(new Date())+' - '+filename+' md5 not match: uploaded: '+ md5_base64 + ' specified: ' + data.headers[obj_key]);
           data.destroy();
           remove_uploaded_file(fdir_path,esp_name);
           return;
@@ -311,9 +311,9 @@ FS_blob.prototype.create_file = function (container,filename,data,resp,fb)
   if (data.connection) // copy stream does not have connection
   {
     data.connection.on('close',function() {
-      winston.log('debug',(new Date())+' - client disconnect');
+      logger.log('debug',(new Date())+' - client disconnect');
       if (data.upload_end === true) { return; }
-      winston.log('warn',(new Date())+' - interrupted upload: ' + filename);
+      logger.log('warn',(new Date())+' - interrupted upload: ' + filename);
       data.destroy();
       stream.destroy();
       fs.unlink(fdir_path+"/"+esp_name, function() {
@@ -340,7 +340,7 @@ FS_blob.prototype.create_file_meta = function (container, filename, opt,resp,fb,
   doc.vblob_file_name = filename;
   fb.MDS.collection(container, {safe:true}, function (err,coll) {
     if (err || !coll) {
-      winston.log('error',(new Date())+" - In creating file "+filename+" meta in container "+container+" "+err);
+      logger.log('error',(new Date())+" - In creating file "+filename+" meta in container "+container+" "+err);
       if (resp !== null) {
         error_msg(404,"NoSuchBucket",err,resp);
         resp.resp_end();
@@ -358,16 +358,16 @@ FS_blob.prototype.create_file_meta = function (container, filename, opt,resp,fb,
         //new object
         coll.insert(doc, function(err,docs) {
           if (err) {
-            winston.log('error',(new Date())+" - In creating file "+filename+" meta in container "+container+" "+err);
+            logger.log('error',(new Date())+" - In creating file "+filename+" meta in container "+container+" "+err);
             if (resp !== null) { error_msg(500,"InternalError",err,resp); resp.resp_end();  }
             fb.delete_file_meta(container,filename,null,fb);
             return;
           } else {
-            winston.log('debug',(new Date())+" - Created meta for file "+filename+" in container "+container);
+            logger.log('debug',(new Date())+" - Created meta for file "+filename+" in container "+container);
             var header = common_header();
             header.ETag = opt.vblob_file_etag;
             resp.resp_code = 200;
-            winston.log('debug',(new Date())+' - is_copy: ' + is_copy);
+            logger.log('debug',(new Date())+' - is_copy: ' + is_copy);
             if (is_copy) {
               resp.resp_body = ('{"CopyObjectResult":')+('{"LastModified":"'+doc.vblob_update_time+'",') + ('"ETag":"'+opt.vblob_file_etag+'"}}');
               header["content-length"] = resp.resp_body.length;
@@ -396,16 +396,16 @@ FS_blob.prototype.create_file_meta = function (container, filename, opt,resp,fb,
         }
         coll.update({"_id":obj._id},{$set:doc, $unset:u_doc}, function (err, cnt) {
           if (err) {
-            winston.log('error',(new Date())+" - In creating file "+filename+" meta in container "+container+" "+err);
+            logger.log('error',(new Date())+" - In creating file "+filename+" meta in container "+container+" "+err);
             if (resp !== null) { error_msg(500,"InternalError",err,resp); resp.resp_end(); }
             fb.delete_file_meta(container,filename,null,fb);
             return;
           } else {
-            winston.log('debug',(new Date())+" - Created meta for file "+filename+" in container "+container);
+            logger.log('debug',(new Date())+" - Created meta for file "+filename+" in container "+container);
             var header = common_header();
             header.ETag = opt.vblob_file_etag;
             resp.resp_code = 200;
-            winston.log('debug',(new Date())+' - is_copy: ' + is_copy);
+            logger.log('debug',(new Date())+' - is_copy: ' + is_copy);
             if (is_copy) {
               resp.resp_body = ('{"CopyObjectResult":')+('{"LastModified":"'+doc.vblob_update_time+'",') + ('"ETag":"'+opt.vblob_file_etag+'"}}');
               header["content-length"] = resp.resp_body.length;
@@ -427,17 +427,17 @@ FS_blob.prototype.delete_file_meta = function (container, filename, resp, fb)
 {
   if (resp === undefined) { resp = null; }
   fb.MDS.collection(container, {safe:true}, function (err,coll) {
-    if (err || !coll) {  winston.log('error',(new Date())+" - In deleting file "+filename+" meta in container "+container+" "+err); if (resp!== null) { error_msg(404,"NoSuchBucket",err,resp); resp.resp_end();}  return; }
+    if (err || !coll) {  logger.log('error',(new Date())+" - In deleting file "+filename+" meta in container "+container+" "+err); if (resp!== null) { error_msg(404,"NoSuchBucket",err,resp); resp.resp_end();}  return; }
     coll.remove({vblob_file_name:filename}, function(err,docs) {
       if (err) {
-        winston.log('error',(new Date())+" - In deleting file "+filename+" meta in container "+container+" "+err);
+        logger.log('error',(new Date())+" - In deleting file "+filename+" meta in container "+container+" "+err);
         if (resp !== null) {
           error_msg(404,"NoSuchFile",err,resp);
           resp.resp_end();
         }
         return;
       }
-      else { winston.log('debug',(new Date())+" - Deleted meta for file "+filename+" in container "+container); }
+      else { logger.log('debug',(new Date())+" - Deleted meta for file "+filename+" in container "+container); }
       fb.delete_file(container,filename,resp);
     });
   });
@@ -452,7 +452,7 @@ FS_blob.prototype.delete_file = function (container, filename, resp)
   //md5_name.update(file_path);
   md5_name.update(filename); //de-couple from root and container paths
   var name_digest =  md5_name.digest('hex');
-  winston.log('debug',(new Date())+" - delete: the md5 hash for "+filename+" is "+name_digest);
+  logger.log('debug',(new Date())+" - delete: the md5 hash for "+filename+" is "+name_digest);
   var name_dig_pre = name_digest.substr(0,PREFIX_LENGTH);
   var fdir_path = c_path + "/" + name_dig_pre; //actual dir for the file  /container/hashprefix/
   if (!Path.existsSync(fdir_path)) { //check such folder
@@ -466,7 +466,7 @@ FS_blob.prototype.delete_file = function (container, filename, resp)
   }
   var esp_name = filename.replace(/\//g,"$_$");
   fs.unlink(fdir_path+"/"+esp_name, function (err) {
-    if (err) { winston.log('error',+(new Date())+" - Deleting file "+err); if(resp !== null) {error_msg(500,"InternalError",err,resp); resp.resp_end();  resp = null; } }
+    if (err) { logger.log('error',+(new Date())+" - Deleting file "+err); if(resp !== null) {error_msg(500,"InternalError",err,resp); resp.resp_end();  resp = null; } }
     fs.rmdir(fdir_path, function(err) {
       if (resp !== null) {
         //resp.writeHeader(204,common_header()); resp.end();
@@ -491,7 +491,7 @@ FS_blob.prototype.copy_file = function (dest_c,dest_f,container,filename,requ,re
   //md5_name.update(file_path);
   md5_name.update(filename); //de-couple from root and container paths
   var name_digest =  md5_name.digest('hex');
-  winston.log('debug',(new Date()) + " - copy: the md5 hash for "+filename+" is "+name_digest);
+  logger.log('debug',(new Date()) + " - copy: the md5 hash for "+filename+" is "+name_digest);
   var name_dig_pre = name_digest.substr(0,PREFIX_LENGTH);
   var fdir_path = c_path + "/" + name_dig_pre; //actual dir for the file  /container/hashprefix/
   if (!Path.existsSync(fdir_path)) { //check such folder
@@ -615,7 +615,7 @@ FS_blob.prototype.read_file = function (container, filename, range,requ,resp,ver
   //md5_name.update(file_path);
   md5_name.update(filename); //de-couple from root and container paths
   var name_digest =  md5_name.digest('hex');
-  winston.log('debug',(new Date())+" - read: the md5 hash for "+filename+" is "+name_digest);
+  logger.log('debug',(new Date())+" - read: the md5 hash for "+filename+" is "+name_digest);
   var name_dig_pre = name_digest.substr(0,PREFIX_LENGTH);
   var fdir_path = c_path + "/" + name_dig_pre; //actual dir for the file  /container/hashprefix/
   if (!Path.existsSync(fdir_path)) { //check such folder
@@ -740,25 +740,25 @@ FS_blob.prototype.list_container = function (container, opt, resp)
   if (!opt["max-keys"] || parseInt(opt["max-keys"],10) > MAX_LIST_LENGTH) { opt["max-keys"] = MAX_LIST_LENGTH; }
   var pre_maxkey=  opt["max-keys"];
   this.MDS.collection(container,{safe:true},function(err,coll) {
-    if (err) {  winston.log('error',(new Date())+" - In listing container "+container+" "+err); error_msg(404,"NoSuchBucket",err,resp); resp.resp_end(); return; }
+    if (err) {  logger.log('error',(new Date())+" - In listing container "+container+" "+err); error_msg(404,"NoSuchBucket",err,resp); resp.resp_end(); return; }
     var evt = new events.EventEmitter();
     var res_array = []; //regular file
     var res_array2 = []; //folder
     evt.on("Next Query", function (opts) {
-      if (resp.client_closed === true) { winston.log('warn',(new Date())+' - client disconnected'); resp.resp_end(); return; }
-      winston.log('debug',(new Date())+" - Next Query");
+      if (resp.client_closed === true) { logger.log('warn',(new Date())+' - client disconnected'); resp.resp_end(); return; }
+      logger.log('debug',(new Date())+" - Next Query");
       var cond = {$exists:true};
       if (opts.prefix) { cond.$regex = "^"+opts.prefix; }
       if (opts.marker) { cond.$gt = opts.marker; }
       var options = {sort:[['vblob_file_name','asc']]};
       if (opts["max-keys"]) { opts["max-keys"] = parseInt(opts["max-keys"],10); options.limit = opts["max-keys"]; }
       coll.find({vblob_file_name:cond},{/*'vblob_file_name':true*/},options, function (err, cursor) {
-        if (err) { winston.log('error',(new Date())+" - Error retrieving data from db "+err); error_msg(500,"InternalError",err,resp); resp.resp_end(); return; }
+        if (err) { logger.log('error',(new Date())+" - Error retrieving data from db "+err); error_msg(500,"InternalError",err,resp); resp.resp_end(); return; }
         if (cursor === null || cursor === undefined) {evt.emit("Finish List");}
         else if (opts.delimiter) { evt.emit("Next Object", opts, cursor); }
         else {
           cursor.each( function(err,doc) {//optimization for queries without delimiter
-            if (resp.client_closed === true) { winston.log('warn',(new Date())+' - client disconnected'); cursor.close(); resp.resp_end(); return; }
+            if (resp.client_closed === true) { logger.log('warn',(new Date())+' - client disconnected'); cursor.close(); resp.resp_end(); return; }
             if (doc)
             { res_array.push({"Key":doc.vblob_file_name, "LastModified":doc.vblob_update_time, "ETag":'"'+doc.vblob_file_etag+'"', "Size":doc.vblob_file_size, "Owner":{}, "StorageClass":"STANDARD"});
               if (opts["max-keys"]) { opts["max-keys"] = opts["max-keys"] - 1; }
@@ -770,8 +770,8 @@ FS_blob.prototype.list_container = function (container, opt, resp)
     });
     evt.on("Next Object", function (opts,cursor) {
       cursor.nextObject( function (err, doc) {
-        if (err)  { winston.log('error',(new Date())+" - Error retrieving data from db "+err); error_msg(500,"InternalError",err,resp); resp.resp_end(); return; }
-        if (resp.client_closed === true) { winston.log('warn',(new Date())+' - client disconnected'); cursor.close(); resp.resp_end(); return; }
+        if (err)  { logger.log('error',(new Date())+" - Error retrieving data from db "+err); error_msg(500,"InternalError",err,resp); resp.resp_end(); return; }
+        if (resp.client_closed === true) { logger.log('warn',(new Date())+' - client disconnected'); cursor.close(); resp.resp_end(); return; }
         if (doc === null || doc === undefined) {
           if (cursor.totalNumberOfRecords > 0)
           { evt.emit("Next Query", opts); }
@@ -788,7 +788,7 @@ FS_blob.prototype.list_container = function (container, opt, resp)
             //delimiter
             //str1 = doc.vblob_file_name;
             pos = str1.search(opts.delimiter);
-            winston.log('debug',(new Date())+" - found delimiter "+opts.delimiter+" at position "+pos);
+            logger.log('debug',(new Date())+" - found delimiter "+opts.delimiter+" at position "+pos);
             if (pos === -1)
             {
               //not found
@@ -801,7 +801,7 @@ FS_blob.prototype.list_container = function (container, opt, resp)
               if (opts.prefix) { len = opts.prefix.length; }
               var str2 = doc.vblob_file_name.substring(0,len+pos);
               opts.marker = str2+String.fromCharCode(doc.vblob_file_name.charCodeAt(len+pos)+1);
-              winston.log('debug',(new Date())+" - Next Marker "+opts.marker+" and len "+len);
+              logger.log('debug',(new Date())+" - Next Marker "+opts.marker+" and len "+len);
               res_array2.push({"Prefix":str2+opts.delimiter}); //another array for folder
               cursor.close();
               if (opts["max-keys"] !== undefined &&  opts["max-keys"] <= 0) { evt.emit("Finish List"); }
@@ -838,7 +838,7 @@ function render_containers(dirs,resp,fb)
   evt.on("Get Date",function (dir_name, idx) {
     fb.MDS.collection(dir_name, {safe:true},function(err,col) {
       if (err) {
-        winston.log('error',(new Date())+" - retreiving meta "+err); /*error_msg(500,"InternalError",err,resp); resp.resp_end();*/
+        logger.log('error',(new Date())+" - retreiving meta "+err); /*error_msg(500,"InternalError",err,resp); resp.resp_end();*/
         dates[idx] = null;
         counter--; if (counter === 0) { evt.emit("Start Render"); }
         return;
@@ -878,7 +878,9 @@ function render_containers(dirs,resp,fb)
 //=======================================================
 var FS_Driver = function(root_path, mds_cred,callback) {
   var this1 = this;
-  var client = new FS_blob(root_path,mds_cred, function(obj) {
+  this1.root_path = root_path; this1.mds_cred = mds_cred;
+  var client = new FS_blob(root_path,mds_cred, function(obj,err) {
+    if (err) {this1.mds_err = err; this1.client = null; if (callback) {callback(this1);} return; } //no client created, but still created a valid driver, will error in pingDest
     this1.client = obj;
     if (callback) { callback(this1); }
   }); //supress warning
@@ -905,7 +907,7 @@ FS_Driver.prototype.read_file = function(container,filename,range,verb,resp,requ
       if (m[1] !== '') { range1.start = parseInt(m[1],10); }
       if (m[2] !== '') { range1.end = parseInt(m[2],10); }
     }
-    winston.log('debug',(new Date())+" - Final range: "+util.inspect(range1));
+    logger.log('debug',(new Date())+" - Final range: "+util.inspect(range1));
   }
   this.client.read_file(container, filename, range1,requ,resp,verb);
 };
@@ -932,6 +934,11 @@ FS_Driver.prototype.delete_bucket = function(container,resp) {
 };
 
 FS_Driver.prototype.pingDest = function(callback) {
+  if (this.client === null) {
+    logger.log('error',(new Date())+' - FS driver does not have a valid connection to meta data service');
+    callback(this.mds_err);
+    return;
+  }
   callback(null);
 };
 

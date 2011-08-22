@@ -2,9 +2,9 @@
   Based on knox project: https://github.com/LearnBoost/knox.git
   Additional library: sax-js xml parser: https://github.com/isaacs/sax-js.git (subject to change)
   Need amazon s3 id/key pair
-  Need winston module for logging
+  Need logger module for logging
 */
-var winston = require('winston');
+var logger = require('../server').logger;
 var knox = require('../common/index.js');
 var fs  = require('fs');
 var util = require('util');
@@ -87,7 +87,7 @@ function general_handler(cl,req,resp,head)
         parser = sax.parser(true);
         parse_xml(parser,resp);
       }
-      if (resp.client_closed === true) { winston.log('warn',(new Date())+' - client connection closed!'); res.destroy(); if (parser) { parser=null;  } resp.resp_end();return; }
+      if (resp.client_closed === true) { logger.log('warn',(new Date())+' - client connection closed!'); res.destroy(); if (parser) { parser=null;  } resp.resp_end();return; }
       parser.write(chunk);
     });
     res.connection.on('close', function () {
@@ -229,7 +229,7 @@ S3_blob.prototype.read_file = function(container, filename, range,verb,resp,requ
       parse_xml(parser,resp);
     }
     res.on('data',function(chunk) {//mean it's a GET
-      if (resp.client_closed === true) { winston.log('warn',(new Date())+' - client connection closed!'); if (parser) { parser=null;}  res.destroy(); resp.resp_end();return; }
+      if (resp.client_closed === true) { logger.log('warn',(new Date())+' - client connection closed!'); if (parser) { parser=null;}  res.destroy(); resp.resp_end();return; }
       if (parser) { parser.write(chunk); } //parse error message
       else {//streaming out data
         resp.resp_handler(chunk); //callback to stream out chunk data
@@ -322,7 +322,7 @@ S3_Driver.prototype.delete_bucket = function(container,resp)
 S3_Driver.prototype.pingDest = function(callback) {
   dns.resolve(this.client.client.endpoint, function(err,addr) {
     if (err) {
-      winston.log('error',(new Date())+' - Cannot resolve s3 domain');
+      logger.log('error',(new Date())+' - Cannot resolve s3 domain');
       callback(err);
     } else {
       var sock = new net.Socket();
@@ -330,7 +330,7 @@ S3_Driver.prototype.pingDest = function(callback) {
       sock.on('connect',function() { sock.destroy(); callback(); } );
       sock.on('error',function(err) {
         sock.destroy();
-        winston.log('error',(new Date())+' - Cannot connect to s3');
+        logger.log('error',(new Date())+' - Cannot connect to s3');
         callback(err);
       });
     }

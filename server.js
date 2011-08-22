@@ -1,7 +1,8 @@
 /*
-  Additional modules: express  winston
+  Additional modules: express  logger
 */
-var winston = require('winston');
+var logger = module.exports.logger = require('winston');
+var valid_name = require('./common/bucket_name_check').is_valid_name;
 var express = require("express");
 var s3auth = require('./common/s3-auth');
 var j2x = require('./common/json2xml');
@@ -30,7 +31,7 @@ try
 }
 
 if (config.logfile !== undefined && config.logfile !== null) {
-  winston.add(winston.transports.File, {filename:config.logfile}).remove(winston.transports.Console);
+  logger.add(logger.transports.File, {filename:config.logfile}).remove(logger.transports.Console);
 }
 
 var driver_start_callback = function (key) {
@@ -96,9 +97,16 @@ var authenticate = function(req,res,next) {
   if (req.params !== undefined && req.params.contain !== undefined) { targets.bucket = req.params.contain; }
   if (req.params !== undefined && req.params[0] !== undefined) { targets.filename = req.params[0]; }
   targets.query = req.query;
+  var res_body;
   if (Authorization === undefined || s3auth.validate(config.keyID,config.secretID, req.method.toUpperCase(), targets, req.headers, Authorization) === false ) {
-    var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"Unauthorized","Message":"Signature does not match"}}'),0);
+    res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"Unauthorized","Message":"Signature does not match"}}'),0);
     server_resp(res,401,res_body);
+    return;
+  }
+  if (targets.bucket !== undefined && !valid_name(targets.bucket)) {
+    logger.log('error',(new Date()) + ' - Invalid bucket name: ' + targets.bucket);
+    res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"InvalidBucketName","Message":"The specified bucket is not valid"}}'),0);
+    server_resp(res,400,res_body);
     return;
   }
   next();
@@ -114,7 +122,7 @@ app.get('/',function(req,res) {
   }
   default_driver.pingDest(function(err) {
     if (err) {
-      winston.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
+      logger.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
       var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"InternalError","Message":"'+err.toString()+'"}}'),0);
       server_resp(res,500,res_body);
     } else
@@ -147,7 +155,7 @@ app.get('/:contain$',function(req,res) {
   res.resp_end = general_resp(res);
   default_driver.pingDest(function(err) {
     if (err) {
-      winston.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
+      logger.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
       var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"InternalError","Message":"'+err.toString()+'"}}'),0);
       server_resp(res,500,res_body);
     } else
@@ -190,7 +198,7 @@ app.get('/:contain/*',function(req,res) {
   };
   default_driver.pingDest(function(err) {
     if (err) {
-      winston.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
+      logger.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
       var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"InternalError","Message":"'+err.toString()+'"}}'),0);
       server_resp(res,500,res_body);
     } else
@@ -204,7 +212,7 @@ app.put('/:contain/*', function(req,res) {
   //here we only need:  copy (src, dest), either intra or inter drivers
   default_driver.pingDest(function(err) {
     if (err) {
-      winston.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
+      logger.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
       var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"InternalError","Message":"'+err.toString()+'"}}'),0);
       server_resp(res,500,res_body);
     } else {
@@ -227,7 +235,7 @@ app.put('/:contain',function(req,res) {
   res.resp_end = general_resp(res);
   default_driver.pingDest(function(err) {
     if (err) {
-      winston.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
+      logger.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
       var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"InternalError","Message":"'+err.toString()+'"}}'),0);
       server_resp(res,500,res_body);
     } else
@@ -240,7 +248,7 @@ app.delete('/:contain/*',function(req,res) {
   res.resp_end = general_resp(res);
   default_driver.pingDest(function(err) {
     if (err) {
-      winston.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
+      logger.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
       var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"InternalError","Message":"'+err.toString()+'"}}'),0);
       server_resp(res,500,res_body);
     } else
@@ -253,7 +261,7 @@ app.delete('/:contain',function(req,res) {
   res.resp_end = general_resp(res);
   default_driver.pingDest(function(err) {
     if (err) {
-      winston.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
+      logger.log('error',(new Date())+" - "+default_driver.driver_key+".pingDest error: " + err);
       var res_body = j2x.json2xml(JSON.parse('{"Error":{"Code":"InternalError","Message":"'+err.toString()+'"}}'),0);
       server_resp(res,500,res_body);
     } else
@@ -261,7 +269,7 @@ app.delete('/:contain',function(req,res) {
   });
 });
 
-winston.log('info',(new Date())+' - listening to port ' + config.port);
+logger.log('info',(new Date())+' - listening to port ' + config.port);
 if (config.port)
 { app.listen(parseInt(config.port,10));} //should load from config file
 exports.vblob_gateway = app;
