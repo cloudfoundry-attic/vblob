@@ -33,7 +33,10 @@ var Client = module.exports = function Client(options) {
   if (!options.key) { throw new Error('aws "key" required'); }
   if (!options.secret) { throw new Error('aws "secret" required'); }
   this.endpoint = 's3.amazonaws.com';
+  this.endport = 443;
+  this.protocol = 'https';
   utils.merge(this, options);
+  //console.log(this.protocol+"://"+this.endpoint + ":" + this.endport);
 };
 
 /**
@@ -48,11 +51,16 @@ var Client = module.exports = function Client(options) {
 
 Client.prototype.request = function(method, targets, headers){
   var content_md5 = "";
+  var content_type = "";
+  var cnt = 1;
+  if (headers === undefined || headers === null) { headers = {}; }
   if (method==="PUT" && targets.filename) //only creating file checkes md5
-  {
+  { cnt+=1; }
+  if(true){
     var keys = Object.keys(headers);
-    for (var idx =0; idx<keys.length;idx++) {
-      if (keys[idx].match(/^content-md5$/i)) { content_md5=headers[keys[idx]]; break; }
+    for (var idx=0, cnt2=0; idx<keys.length && cnt2<cnt;idx++) {
+      if (cnt === 2 && keys[idx].match(/^content-md5$/i)) { cnt2++; content_md5=headers[keys[idx]]; }
+      else if (keys[idx].match(/^content-type$/i)) { cnt2++; content_type=headers[keys[idx]]; }
     }
   }
   var dest = targets.endpoint;
@@ -61,7 +69,7 @@ Client.prototype.request = function(method, targets, headers){
     if (dest.expire > new Date().valueOf()) { dest = dest.name; }
     else { dest = this.endpoint; }
   }
-  var options = { host: ( (targets.bucket!==undefined && targets.bucket !== null)?targets.bucket+".":"")+ dest, port: 443 }
+  var options = { host: dest, port: this.endport }
     , date = new Date();
 
   if (headers === null || headers === undefined) { headers = {}; }
@@ -69,7 +77,7 @@ Client.prototype.request = function(method, targets, headers){
   // Default headers
   utils.merge(headers, {
       Date: date.toUTCString()
-    , Host: ((targets.bucket!==undefined && targets.bucket !== null)?targets.bucket+".":"")+ dest
+    , Host: dest
   });
 
   // Authorization header
@@ -80,17 +88,17 @@ Client.prototype.request = function(method, targets, headers){
     , verb: method
     , md5 : content_md5
     , date: date.toUTCString()
-    , resource: auth.canonicalizeResource((targets.bucket===undefined || targets.bucket === null)?'/':(targets.filename ?/* join('/', targets.bucket, targets.filename)*/ '/'+targets.bucket+'/'+targets.filename+utils.to_query_string(targets.query):join('/',targets.bucket)+'/'+utils.to_query_string(targets.query)))
-    , contentType: headers['Content-Type']
+    , resource: auth.canonicalizeResource((targets.bucket===undefined || targets.bucket === null)?'/':(targets.filename ?/* join('/', targets.bucket, targets.filename)*/ '/'+targets.bucket+'/'+targets.filename+utils.to_query_string(targets.query):join('/',targets.bucket)+utils.to_query_string(targets.query)))
+    , contentType: content_type
     , amazonHeaders: auth.canonicalizeHeaders(headers)
   });
 
   // Issue request
   options.method = method;
-  options.path = targets.filename?/*join('/', targets.filename)*/ '/'+targets.filename+utils.to_query_string(targets.query):'/'+ utils.to_query_string(targets.query);
+  options.path = (targets.bucket===undefined || targets.bucket === null)?'/':(targets.filename ?/* join('/', targets.bucket, targets.filename)*/ '/'+targets.bucket+'/'+targets.filename+utils.to_query_string(targets.query):join('/',targets.bucket)+utils.to_query_string(targets.query));
   options.headers = headers;
-  var req = https.request(options);
-  req.url = this.https(targets.bucket,targets.filename?targets.filename:'', dest);
+  var req = this.protocol === 'https' ? https.request(options) : http.request(options);
+  req.url = this.protocol === 'https' ? this.https(targets.bucket,targets.filename?targets.filename:null, dest) : this.http(targets.bucket,targets.filename?targets.filename:null, dest);
   return req;
 };
 
@@ -317,7 +325,9 @@ Client.prototype.deleteFile = function(targets, headers, fn){
 Client.prototype.url =
 Client.prototype.http = function(bucket,filename,ep){
   var dest = ep; if (dest === null || dest === undefined) { dest = this.endpoint; }
-  return 'http://' + join((bucket!==null?bucket+".":"")+dest, filename);
+  if (this.endport !== 80) { dest += ":"+this.endport; }
+  if (bucket !== null) { dest = dest + "/"+bucket; if (filename !== null) { dest += "/"+filename; } }
+  return 'http://' + dest
 };
 
 /**
@@ -326,7 +336,9 @@ Client.prototype.http = function(bucket,filename,ep){
 
 Client.prototype.https = function(bucket,filename,ep){
   var dest = ep; if (dest === null || dest === undefined) { dest = this.endpoint; }
-  return 'https://' + join(bucket+"."+this.endpoint, filename);
+  if (this.endport != 443) { dest += ":"+this.endport; }
+  if (bucket !== null) { dest = dest + "/"+bucket; if (filename !== null) { dest += "/"+filename; } }
+  return 'https://' + dest
 };
 
 /**

@@ -104,13 +104,30 @@ function general_handler(cl,req,resp,head)
   });
 }
 
-function S3_blob(credentials)
+function S3_blob(credentials,callback)
 {
-  this.client = knox.createClient({
-    key: credentials.key,
-    secret: credentials.secret
-  });
   this.region_cache = { };
+  var this1 = this;
+  this.client = null;
+  var client = knox.createClient(credentials);
+  dns.resolve(client.endpoint, function(err,addr) {
+    if (err) {
+      logger.log('error',(new Date())+' - Cannot resolve s3 domain');
+      if (callback) { callback(this1,err); return; }
+    } else {
+      var sock = new net.Socket();
+      sock.connect(client.endport,addr[0]);
+      sock.on('connect',function() { sock.end(); 
+        this1.client = client;
+        if (callback) { callback(this1); return; }
+      });
+      sock.on('error',function(err) {
+        sock.destroy();
+        logger.log('error',(new Date())+' - Cannot connect to s3');
+        if (callback) { callback(this1,err); return; }
+      });
+    }
+  });
 }
 
 //requ: request from client; resp: response to client
@@ -259,8 +276,13 @@ S3_blob.prototype.list_container = function (container,opt,resp)
   req.end();
 };
 
-var S3_Driver = function S3_Driver(client) {
-  this.client = client;
+var S3_Driver = function S3_Driver(option,callback) {
+  var this1 = this;
+  var client = new S3_blob(option, function(obj,err) {
+    if (err) {this1.s3_err = err; this1.client = null; if (callback) {callback(this1);} return; }
+    this1.client = obj;
+    if (callback) { callback(this1); }
+  });
 };
 
 S3_Driver.prototype.list_buckets = function(requ,resp)
@@ -320,29 +342,14 @@ S3_Driver.prototype.delete_bucket = function(container,resp)
 };
 
 S3_Driver.prototype.pingDest = function(callback) {
-  dns.resolve(this.client.client.endpoint, function(err,addr) {
-    if (err) {
-      logger.log('error',(new Date())+' - Cannot resolve s3 domain');
-      callback(err);
-    } else {
-      var sock = new net.Socket();
-      sock.connect(80,addr[0]);
-      sock.on('connect',function() { sock.destroy(); callback(); } );
-      sock.on('error',function(err) {
-        sock.destroy();
-        logger.log('error',(new Date())+' - Cannot connect to s3');
-        callback(err);
-      });
-    }
-  });
+  if (this.client === null) {
+    logger.log('error',(new Date())+' - S3 driver does not have a valid connection');
+    callback(this.s3_err);
+    return;
+  }
+  callback(null);
 };
 
 module.exports.createDriver = function(option,callback) {
-  var S3_client = new S3_blob({
-    key: option.key,
-    secret: option.secret}
-  );
-  var dr = new S3_Driver(S3_client);
-  if (callback) { callback(dr); }
-  return dr;
+  return new S3_Driver(option,callback);
 };
