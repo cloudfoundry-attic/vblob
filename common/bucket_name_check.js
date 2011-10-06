@@ -8,6 +8,7 @@
     6. no ".."
     7. no "-." or ".-"
     8. no IP address
+    9. no trailing "-"
 */
 module.exports.is_valid_name = function (name)
 {
@@ -17,5 +18,6 @@ module.exports.is_valid_name = function (name)
   if (name.match(/^([a-z]|[0-9])+/) === null) { return false; }
   if (name.match(/([A-Z])+/g) !== null) { return false; }
   if (name.match(/\/|\\/g) !== null) { return false; }
+  if (name.match(/-$/g) !== null) { return false; }
   return true;
 };

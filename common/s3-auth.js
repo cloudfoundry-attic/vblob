@@ -1,7 +1,6 @@
-var utils = require('./lib/knox/utils');
-var auth = require('./lib/knox/auth');
+var utils = require('./s3/utils');
+var auth = require('./s3/auth');
 var join = require('path').join;
-var winston = require('winston');
 
 module.exports.validate = function(keyID, secretID, method, targets, headers, signature){
   var content_md5 = "";
@@ -32,6 +31,5 @@ module.exports.validate = function(keyID, secretID, method, targets, headers, si
     , contentType: content_type
     , amazonHeaders: auth.canonicalizeHeaders(headers)
   });
-  winston.log('debug',(new Date())+' - signature from request: '+signature+'; calculated signature from request: ' + Authorization);
   return Authorization === signature;
 };

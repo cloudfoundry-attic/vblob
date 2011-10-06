@@ -1,8 +1,8 @@
-/*!
- * knox - auth
- * Copyright(c) 2010 LearnBoost <dev@learnboost.com>
- * MIT Licensed
- */
+/*!		
+* knox - auth		
+* Copyright(c) 2010 LearnBoost <dev@learnboost.com>		
+* MIT Licensed		
+*/
 
 /**
  * Module dependencies.

@@ -1,8 +1,8 @@
-/*!
- * knox - utils
- * Copyright(c) 2010 LearnBoost <dev@learnboost.com>
- * MIT Licensed
- */
+/*!		
+* knox - utils		
+* Copyright(c) 2010 LearnBoost <dev@learnboost.com>		
+* MIT Licensed		
+*/
 
 exports.to_query_string = function(options) {
  if (options === null || options === undefined) { return ''; }
