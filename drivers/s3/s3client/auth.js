@@ -1,13 +1,3 @@
-/*!
- * knox - auth
- * Copyright(c) 2010 LearnBoost <dev@learnboost.com>
- * MIT Licensed
- */
-
-/**
- * Module dependencies.
- */
-
 var crypto = require('crypto');
 var url = require('url');
 
