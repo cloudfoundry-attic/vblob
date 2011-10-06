@@ -32,6 +32,8 @@
     "keyID": "<any id for auth>",
     "secretID": "<any secret for auth>",
     "auth": "enabled",
-    "debug": true
+    "debug": true,
+    "account_file" : "./account.json",
+    "account_api" : true
 }
 

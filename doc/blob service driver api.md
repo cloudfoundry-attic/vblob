@@ -4,131 +4,263 @@
 
     driver = createDriver(options, callback)
 
-`createDriver` is a factory method, and the only function exported by each driver module. It returns an interface object with all the heartbeat, bucket, and object operations listed below.
+`createDriver` is a factory method, and the only function exported by each driver module. The function returns an instance of a driver interface configured with the specified connection options. The Blob service is currently configured to call this method for s3 and FS type drivers upon startup.
 
-**`options`** is a hash variable that contains credentials for specific drivers.  
+`options` is a hash variable that contains credentials for specific drivers. These corresponds to the `options` specified in config.json for each driver.
 
-The FS driver requires:  
+In addition, all drivers receive:
 
-- `root`: the root folder storing all the blobs
-- `mds` : a hash contains configuration for mongodb meta service
-- `mds.host` : mongodb host ip
-- `mds.port` : mongodb port
-- `db` : mongodb db name
-- `user` : mongodb user account
-- `pwd` : password for the above account
+- `options.logger`: a logger object on which to call error(), debug(), info(), and warn() with a message string for logging purposes.
 
-The S3 driver requires:
+The FS driver receives:  
 
-- `key` : s3 account id
-- `secret` : secret for the above id
+- `options.root`: the root folder storing all the blobs
 
-**`callback`** will register periodical events for refreshing bucket-driver mapping.  
+The S3 driver receives:
 
-## heartbeat
+- `options.key` : s3 account id
+- `options.secret` : secret for the above id
 
-    pingDest (callback)
-      
-This is workaround for a known node.js bug. When an http request is sent to an unreachable destination, node will raise an uncachable exception which in turn crashes the whole process. Because of this bug, current design will call this API first to detect if destination if reachable. If yes, further http connection will establish within the callback.
+createDriver() returns the driver object immediately, but internally it may still be waiting to finish initializing itself. The driver should also return itself in callback(driver) when it is done initializing.
+
+## General request/response flow 
+
+The driver api supports passage of request and response information between the client and the back-end service via an `options` object passed into the driver on some methods (see specific methods below), and via a `response_header` object on the return. Note that the names of headers are passed to and from driver methods as lower-cased JSON keys.
+
+Inbound streams are passed to the driver as a stream object on which the driver can register `data` and `end` event handlers or connect via a `pipe()`. Similarly, outbound streams are returned by the driver as a `response_data` stream which the gateway can `pipe()` back to the client.
+
+Each interface method includes a callback allowing requests to be processed by the driver asynchronously. The callback has the following signature:
+
+    callback (response_code, response_header, response_body, response_data)
+
+- `reponse_code` : HTTP response code
+- `response_header` : array of HTTP headers
+- `response_body` : response object for non-streaming responses -- will be converted to XML by the gateway
+- `response_data` : null except for responses which stream back data -- must be an object that supports pipe()
+
+In order to return s3-compatible XML, the JSON object returned in `response_body` must match the s3 XML response schema for the respective operation i.e all keys are mapped directly to element names in XML.
+
+## errors
+
+Drivers should return errors via the callback (not via throw) as follows.
+
+    callback (http-response-code, null, {"Error": { "Code": error-code, "Message": error-message }});
+
 
 ## bucket operations
 
-    list_buckets (requ,resp)
-      
-- `requ` : request from client (app)
-- `resp` : response to client (app)
-	
-In current design this function is not used to return results to client. Instead, it's used by server to periodically get the lists of buckets from each individual driver. The lists of buckets are used for refreshing the bucket-driver mapping for blob virtualization. Currently `requ` is always null. `resp` is not a real response to client, it's just a response mock.
-	
-    create_bucket (container,resp,requ)  
+### bucket list
 
-- `container` : string for bucket name
-- `requ` : client request
-- `resp` : response to client
-	
-It's up to the driver to implement the set of operations supported.  
-Currently FS driver does not use any information from `requ`. It only creates a bucket.    
-S3 driver can support the following:  
+    bucket_list (callback)
 
-- basic bucket creation
-- creating a bucket to a given location; this reads an xml configuration file from request body in `requ`
-- enabling / disabling logging on the bucket: The `requ` will contain parameter `?logging` in query; 
+Enumerates all buckets owned by the client.
 
-.
-    delete_bucket (container,resp)
+The response body is a javascript object with the following structure: Note that there may be multiple objects in the Bucket array, and CreationDate values follow the ISO convention for XML date strings.
 
-- `container` : bucket name
-- `resp` : response to client
-	
-This deletes a bucket. Driver should check if a bucket is empty. If not, driver should return error response. This is suggested for S3 compatibility, not mandatory.
-	
-    list_bucket (container,option,resp)  
+    { ListAllMyBucketsResult: { Buckets: { Bucket: [ {Name: "Bucket1", CreationDate: "2011-10-01T01:20:36.000Z"}, ... ] }}}
 
-- `container` : bucket name
-- `option` : a set of parameters parsed from request query
-- `option.marker` : specifying the starting key for listing objects
-- `option.prefix` : specifying the prefix of objects that should be listed
-- `option.delimiter` : specifying the delimiter of objects that should be listed
-- `option.max-keys` : specifying the max number of objcts to be listed in on query
-- `option.location` : specifying this is a get location request (S3 driver specific)
-- `option.logging` : specifying this is a get logging request (s3 driver specific)
-	
-It's up to the driver to implement the set of operations supported. 
-	
-FS driver supports only listing objects (only accepts the first four option parameters listed above).  
-S3 driver supports the following operations:  
+The javascript object is converted to XML by the gateway before being sent back to the client.
+Note that the gateway may insert Owner information if it has any.
 
-- listing objects (using the first four params)
-- get bucket location see [aws documentation](http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETlocation.html)
-- get bucket logging [aws documentation](http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETlogging.html)
+    <?xml version="1.0" encoding="UTF-8"?>
+    <ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+      <Owner>
+        <ID>..</ID>
+        <DisplayName>...</DisplayName>
+      </Owner>
+      <Buckets>
+        <Bucket>
+          <Name>Bucket1</Name>
+          <CreationDate>2011-10-01T01:20:36.000Z</CreationDate>
+        </Bucket>
+        <Bucket>
+          <Name>Bucket2</Name>
+          <CreationDate>2011-10-01T01:20:37.000Z</CreationDate>
+        </Bucket>
+        ...
+      </Buckets>
+    </ListAllMyBucketsResult>
+
+### bucket create
+
+    bucket_create (bucket_name, options, data_stream, callback)  
+
+Creates a new bucket.
+
+- `options` are parameters parsed from the request such as `x-amz-acl` -- this parameter is currently ignored by both drivers.
+- `data_stream` is an optional payload for this like `BucketConfiguration` -- this parameter is also currently ignored by both drivers.
+- If the bucket already exists for the same account, the response is the same as a successfull creation (return 200).
+- The request may be rejected on s3 if the bucket name is already taken by another user -- returns 409 and error code `BucketAlreadyExists`
+- If the maximum number buckets is reached, return 400 and an error code `TooManyBuckets`. The default limit in S3 and the FS driver is 100 buckets per account.
+- If the bucket name is invalid, return 400 and an error code `InvalidBucketName`.
+
+### bucket delete
+
+    bucket_delete (bucket_name, callback)
+
+Driver should check if a bucket is empty. If not, driver should return 409 with error code `BucketNotEmpty` 
+
+### bucket options
+
+    bucket_options (bucket_name, options, callback)  
+
+Currently not implemented in any drivers, but intended to retrieve options and policies such as `location` and `logging` or ACLs.
 
 ## object operations
 
-    read_file (container,filename,range,verb,resp,requ)
+### object list
 
-- `container` : bucket name
-- `filename` : object key
-- `range` : range header
-- `verb` : either get or head
-- `resp` : request from client
-- `requ` : response to client
+    object_list (bucket_name, options, callback)  
 
-Either return the whole body of the object, or do a partial read(if range is present).
+Returns a list of object keys in a bucket. 
+This operation is only supported by the S3 driver currently.
 
-It's up to the driver to decide the set of headers / parameters to support. Currently both S3 and FS support the following headers:
+`options` are query parameters parsed from request query
 
-- `Range`
-- `If-Modified-Since` 
-- `If-Unmodified-Since`
-- `If-Match` 
-- `If-None-Match`
+- `options.marker` : specifying the starting key for listing objects
+- `options.prefix` : specifying the prefix of objects that should be listed
+- `options.delimiter` : specifying the delimiter of objects that should be listed
+- `options.max-keys` : specifying the max number of objcts to be listed in on query
 
-In addition, S3 driver supports the response-* parameters.
+The result returned in the response_body of the callback is a JSON object with the following structure. Note that `Contents` array can contain a variable number of objects.
 
-    create_file (container,filename,requ,resp)
+    {
+    "ListBucketResult": {
+      "Name": "Bucket1",
+      "Prefix": {},
+      "Marker": {},
+      "MaxKeys": "1000",
+      "IsTruncated": "false",
+      "Contents": [
+      {
+        "Key": "object_key1",
+        "LastModified": "2011-07-27T17:29:23.000Z",
+        "ETag": "\"0c0e7e404e17edd568853997813f9354\"",
+        "Size": "47392",
+        "Owner": {
+          "ID": "03b14d14cb23421fe7400e872df6fd8969efbb32f4584207fa5e5cf5ae580ca8",
+          "DisplayName": "someone"
+        },
+        "StorageClass": "STANDARD"
+      },
+      {
+        "Key": "object_key2",
+        "LastModified": "2011-07-27T21:16:00.000Z",
+        "ETag": "\"d1919d0a02a24aa16412301e9e9dfbe4\"",
+        "Size": "58144",
+        "Owner": {
+          "ID": "03b14d14cb23421fe7400e872df6fd8969efbb32f4584207fa5e5cf5ae580ca8",
+          "DisplayName": "someone"
+        },
+        "StorageClass": "STANDARD"
+      },
+      ...
+    ]}}
 
-Driver should look at the `requ.headers` for particular header keys. Both S3 and FS drivers support:  
+This response is the translated by the server into XML.
 
-- `x-amz-meta-*` : user-defined metadata
-- `Content-Type`
-- `Content-MD5` : this is not ETag (hex of md5 hash), it's the base64 encoding of the md5 hash
-- `Content-Length`
-	
-In addition, S3 driver supports:
+    <?xml version  ="1.0" encoding="UTF-8"?>
+    <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+      <Name>Bucket1</Name>
+      <Prefix/>
+      <Marker/>
+      <MaxKeys>1000</MaxKeys>
+      <IsTruncated>false</IsTruncated>
+      <Contents>
+        <Key>object_key1</Key>
+        <LastModified>2011-07-27T17:29:23.000Z</LastModified>
+        <ETag>"0c0e7e404e17edd568853997813f9354"</ETag>
+        <Size>47392</Size>
+        <Owner>
+          <ID>03b14d14cb23421fe7400e872df6fd8969efbb32f4584207fa5e5cf5ae580ca8</ID>
+          <DisplayName>someone</DisplayName>
+        </Owner>
+        <StorageClass>STANDARD</StorageClass>
+      </Contents>
+      <Contents>
+        <Key>object_key2</Key>
+        <LastModified>2011-07-27T21:16:00.000Z</LastModified>
+        <ETag>"d1919d0a02a24aa16412301e9e9dfbe4"</ETag>
+        <Size>58144</Size>
+        <Owner>
+          <ID>03b14d14cb23421fe7400e872df6fd8969efbb32f4584207fa5e5cf5ae580ca8</ID>
+          <DisplayName>someone</DisplayName>
+        </Owner>
+        <StorageClass>STANDARD</StorageClass>
+      </Contents>
+      ...
+    </ListBucketResult>
 
-- `Cache-Control`
-- `Content-Disposition`
-- `Content-Encoding`
-- `Expires`
-- `x-amz-storage-class`
+### object read
 
-.
-   copy_file (dest_c,dest_f,src_c,src_f,requ,resp)
+Returns an object or part of an object, streamed back via `callback` through `response_data`.
+If options
+
+    object_read (bucket_name, object_key, options, callback)
+
+`options` are parameters parsed from the request (mostly headers)
+
+- `options.range` : range header
+- `options.head` : get only the headers
+
+The following options cause the request to behave conditionally based on the modification date or ETag (MD5 hash).
+
+- `options.if-modified-since` 
+- `options.if-unmodified-since`
+- `options.if-match` 
+- `options.if-none-match`
+
+The following options are used to override response headers. The driver should return them verbatim in the `response_headers` parameter of the callback, and, if appropriate, also pass them on to the underlying storage service (like s3) so that they can have the desired effect in any HTTP proxy/cache intermediaries. 
+
+- `options.response-content-type`
+- `options.response-content-language`
+- `options.response-expires`
+- `options.response-cache-control`
+- `options.response-content-disposition`
+- `options.response-content-encoding`
 
 
-*TODO*
+### object create
 
-    delete_file (container,filename,resp)  
+Creates or replaces an object with a particular object_key. If multiple concurrent requests occur, the last request to finish will win.
+
+    object_create (bucket_name, object_key, options, metadata, data_stream, callback)
+
+`options` are parameters parsed from the request (mostly headers) 
+
+- `options.content-md5` : this is the base64 encoding of the md5 hash (unlike ETag which is in hex). If this is present the creation of the object will be conditional the value of this option matching the md5 hash of the incoming data stream.
+
+`metadata` are additional names/values stored together with the blob and returned as headers in an object_read request
+
+- `metadata.x-amz-meta-*` : user-defined metadata
+- `metadata.content-type`
+- `metadata.content-length` : this header is required
+- `metadata.cache-control`
+- `metadata.content-disposition`
+- `metadata.content-encoding`
+- `metadata.expires`
+
+
+### object copy
+
+Copies an object to another object with a different key, OR replaces the metadata on an object. This operation does not have an input stream.
+
+    object_copy (bucket_name, object_key, source_bucket_name, source_object_key, options, metadata, callback)
+
+`source_bucket_name` and `source_object_key` specify the source, which may be the same as the `bucket_name` and `object_key`
+
+`options.x-amz-metadata-directive` is optional and has either value `COPY` or `REPLACE`. When copying an object to itself, the value must be `REPLACE`, which causes existing metadata stored with the object to be replaced with new metadata from `metadata`. If the value is `COPY` metadata is copied from the existing object instead of coming from the request.
+
+The following options cause the request to behave conditionally based on the modification date or ETag (MD5 hash) just like the corresponding headers on object_create.
+
+- `options.x-amz-copy-source-if-modified-since` 
+- `options.x-amz-copy-source-if-unmodified-since`
+- `options.x-amz-copy-source-if-match` 
+- `options.x-amz-copy-source-if-none-match`
+
+
+### object delete
+
+    object_delete (bucket_name, object_key, callback)  
 
 Deletes an object
-

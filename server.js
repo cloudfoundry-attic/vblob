@@ -63,11 +63,11 @@ var driver_start_callback = function (key) {
     var key = Object.keys(dr)[0];
     var value = dr[key];
     driver_order[key] = i;
-    value.option.logger = logger;
     if (config.current_driver !== undefined) {
-      if (config.current_driver.toLowerCase() === key) {current_driver = drivers[key]=require('./drivers/'+value.type).createDriver(value.option, driver_start_callback(key) );}
+      if (config.current_driver.toLowerCase() === key) {value.option.logger = logger; current_driver = drivers[key]=require('./drivers/'+value.type).createDriver(value.option, driver_start_callback(key) );}
     } else
     if (current_driver === null) {
+      value.option.logger = logger;
       current_driver = drivers[key] = require('./drivers/'+value.type).createDriver(value.option, driver_start_callback(key) );
     }
   }
@@ -156,11 +156,163 @@ var authenticate = function(req,res,next) {
   next();
 };
 
-
 if (config.debug) {
   express.logger.token('headers', function(req, res){ return '\n' + req.method + ' ' + req.url + '\n' + util.inspect(req.headers) + '\n\n' + res._header + '\n'; })
   app.use(express.logger(':headers'));
 }
+
+//============= CF specific =========
+//account mgt
+if (config.account_file)
+{
+  try {
+    var creds = JSON.parse(fs.readFileSync(config.account_file));
+    credential_hash = null;
+    credential_hash = creds;
+    if (config.keyID && config.secretID) credential_hash[config.keyID] = config.secretID;
+  } catch (err) {
+    //do nothing
+  }
+  fs.watchFile(config.account_file, function(cur,prev) {
+    if (cur.mtime !== prev.mtime){
+      var creds={};
+      try {
+        creds = JSON.parse(fs.readFileSync(config.account_file));
+      } catch(err)
+      {
+        //do nothing
+      }
+      credential_hash = null;
+      credential_hash = creds;
+      creds = null;
+      if (config.keyID && config.secretID) credential_hash[config.keyID] = config.secretID;
+      //console.log(require('util').inspect(credential_hash, false, 2));
+    }
+  });
+  if (config.account_api && config.account_api === true) {
+    app.put('/~bind[/]{0,1}$', function(req,res) {
+      var obj_str = "";
+      req.on('data', function(chunk) { obj_str += chunk.toString();
+        if (obj_str.length > 512) {
+           req.destroy();
+           general_resp(res,null,req.method.toLowerCase())(400,{},{Error:{Code:"MaxMessageLengthExceeded",Message:"Your request was too big."}}, null);
+        }
+      } );
+      req.on('end', function() {
+        var obj;
+        try {
+          obj = JSON.parse(obj_str); obj_str = null;
+        } catch (err) {
+          general_resp(res)(400,{},{Error:{Code:"BadJSONFormat",Message:"The request has bad JSON format"}},null);
+          return;
+        }
+        //since it's single threaded, at this moment there won't be any concurrent (un)binding
+        //sync opening the underlying file is safe
+        var acc_obj= {};
+        try {
+          acc_obj = JSON.parse(fs.readFileSync(config.account_file));
+        } catch (err) {
+          //do nothing
+        }
+        var key = Object.keys(obj)[0];
+        if (key === config.keyID || acc_obj[key]) {
+          //reject this request
+          general_resp(res,null,req.method.toLowerCase())(409,{},{Error:{Code:"KeyExists",Message:"The key you want to add already exists"}}, null);
+        } else {
+          //add to account file and ack
+          acc_obj[key] = obj[key];
+          fs.writeFileSync(config.account_file, JSON.stringify(acc_obj));
+          general_resp(res,null,req.method.toLowerCase())(200,{},null, null);
+        }
+      });
+    });
+    app.get('/~bind[/]{0,1}$', function(req,res) { //get all bindings for CF
+      var tmp_fn = '/tmp/get-bind-'+new Date().valueOf()+'-'+Math.floor(Math.random()*10000);
+      try {
+        fs.writeFileSync(tmp_fn,(fs.readFileSync(config.account_file)));
+      } catch (err) {
+        fs.writeFileSync(tmp_fn,"{}");
+      }
+      var st = fs.createReadStream(tmp_fn);
+      st.on('open', function(fd) {
+        fs.unlinkSync(tmp_fn); //fs trick
+        general_resp(res,null,req.method.toLowerCase())(200,{},null, st);
+      });
+    });
+    app.put('/~unbind[/]{0,1}$', function(req,res) {
+      var obj_str = "";
+      req.on('data', function(chunk) { obj_str += chunk.toString();
+        if (obj_str.length > 512) {
+           req.destroy();
+           general_resp(res,null,req.method.toLowerCase())(400,{},{Error:{Code:"MaxMessageLengthExceeded",Message:"Your request was too big."}}, null);
+        }
+      } );
+      req.on('end', function() {
+        var obj;
+        try {
+          obj = JSON.parse(obj_str); obj_str = null;
+        } catch (err) {
+          general_resp(res)(400,{},{Error:{Code:"BadJSONFormat",Message:"The request has bad JSON format"}},null);
+          return;
+        }
+        //since it's single threaded, at this moment there won't be any concurrent (un)binding
+        //sync opening the underlying file is safe
+        var acc_obj= {};
+        try {
+          acc_obj = JSON.parse(fs.readFileSync(config.account_file));
+        } catch (err) {
+          //do nothing
+        }
+        var key = Object.keys(obj)[0];
+        if (key === config.keyID || !acc_obj[key]) {
+          //reject this request
+          general_resp(res,null,req.method.toLowerCase())(404,{},{Error:{Code:"NoSuchKey",Message:"The key you want to delete does not exist"}}, null);
+        } else {
+          //add to account file and ack
+          delete acc_obj[key];
+          fs.writeFileSync(config.account_file, JSON.stringify(acc_obj));
+          general_resp(res,null,req.method.toLowerCase())(200,{},null, null);
+        }
+      });
+    });
+  }
+}
+
+//s3 creds provisioning
+if (config.drivers[driver_order[config.current_driver]][config.current_driver].type === 's3') {
+  //add routes
+  app.put('/~s3/config[/]{0,1}$', function(req,res) {
+    var obj_str = "";
+    req.on('data', function(chunk) { obj_str += chunk.toString();
+      if (obj_str.length > 1024) {
+         req.destroy();
+         general_resp(res,null,req.method.toLowerCase())(400,{},{Error:{Code:"MaxMessageLengthExceeded",Message:"Your request was too big."}}, null);
+      }
+    } );
+    req.on('end', function() {
+      var obj;
+      try {
+        obj = JSON.parse(obj_str); obj_str = null;
+      } catch (err) {
+        general_resp(res)(400,{},{Error:{Code:"BadJSONFormat",Message:"The request has bad JSON format"}},null);
+        return;
+      }
+      //overwrite driver's config and then write back to file
+      if (config.drivers[driver_order[config.current_driver]][config.current_driver].option)
+        delete config.drivers[driver_order[config.current_driver]][config.current_driver].option;
+      config.drivers[driver_order[config.current_driver]][config.current_driver].option = obj;
+      fs.writeFileSync(conf_file, JSON.stringify(config,null, 4));
+      //now re-create s3 driver object
+      if (drivers[config.current_driver]) delete drivers[config.current_driver];
+      current_driver = null;
+      obj.logger = logger;
+      current_driver = drivers[config.current_driver] = require('./drivers/s3').createDriver(obj, function(o){
+        general_resp(res,null,req.method.toLowerCase())(200,{},null, null);
+      });
+    });
+  });
+}
+//======== END OF CF specific ============
 
 var bucket_list_post_proc = function(resp_body) {
   if (resp_body.ListAllMyBucketsResult.Owner === undefined) {

@@ -13,8 +13,8 @@ var utils = require('./utils')
   , fs = require('fs');
 
 var Client = module.exports = function Client(options) {
-  if (!options.key) { throw new Error('aws "key" required'); }
-  if (!options.secret) { throw new Error('aws "secret" required'); }
+  if (!options.key) { this.key = 'dummy'; }
+  if (!options.secret) { this.secret = 'dummy'; }
   this.endpoint = options.host || 's3.amazonaws.com';
   this.endport = options.port || 443;
   this.protocol = options.protocol || 'https';

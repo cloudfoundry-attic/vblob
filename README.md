@@ -6,13 +6,13 @@ The blob service provides an S3-compatible HTTP endpoint to an underlying storag
 
 ## Features
 - RESTful web service
-- Plugin model (currently support local fs, s3)
+- S3 compatibility
+- plugin model (currently support local fs, s3)
 - streaming in/out blobs
 - basic blob operations: create/delete/get/copy
 - create/list/delete buckets
-- enumerate with prefix/delimiter/marker/max-keys
+- s3 driver: enumerate with prefix/delimiter/marker/max-keys
 - user defined meta data
-- S3 compatibility and limited S3 pass-thru (bucket configs, headers, etc)
 
 ## API Documentation
 - see [doc](doc) directory
@@ -22,17 +22,16 @@ The blob service provides an S3-compatible HTTP endpoint to an underlying storag
 - Winston, logging module
 
 ## Submodules
-- node-mongodb-native: mongoDB interface
 - sax-js: xml parser
 
 ## Installing node.js
-The blob service depends on [node.js](http://nodejs.org/). We are working with the v0.4 branch and v0.4.9 tag.  
+The blob service depends on [node.js](http://nodejs.org/). We are working with the v0.4 branch and v0.4.12 tag.  
 
 To match the same branch and tag from github:
 
     $> git clone -b v0.4 https://github.com/joyent/node.git <target-directory>
     $> cd <target-directory>
-    $> git checkout v0.4.9
+    $> git checkout v0.4.12
 
 To build node.js (sudo?)
 
@@ -49,80 +48,70 @@ Most node.js applications require modules distributed via npm. Instructions for 
     $> cd <target-directory>
     $> git submodule init
     $> git submodule update
-    $> cd blob_fs/node-mongodb-native
-    $> make
-    $> cd ../..
     $> cp config.json.sample config.json
     
 now edit `config.json`
-    
-Note that the Blob service uses the BSON component inside node-mongodb-native which requires a native binary to be compiled and installed.
 
+## FS driver setup
+The FS driver uses directories and files starting at a "root" location in the local file system. For scalability, the fs driver design supports multiple instances of the gateway operating on the same files. Metadata and blobs live in separate physical files in different directories. New files do not replace existing files until they have been fully uploaded and persisted. Old files are cleaned up using garbage collection processes which run in the background.
 
-## FS driver: MongoDB setup
-The FS driver uses MongoDB for storing metadata about each object in the file system. For every bucket there is a separate collection with the same name as the bucket. Each instance of the gateway requires its own MongoDB database.
+## S3 driver setup
+The S3 driver requires a valid id/key pair from your Amazon S3 storage account (no additional metadata storage is used)
 
-- start mongo: E.g. `$> mongod -f mongodb.config` (adjust to correct config file location - config file points to db location)
-- note port on startup (to match `mds.port` option in config.json)
-- start mongo console: `$> ./mongo` in bin folder
-
-Inside the mongo shell:
-
-- create database, e.g.: `> use test` (note db name to match `mds.db` option)
-- setup user account, e.g.: `> db.addUser('<user>', '<password>')` (to match `mds.user` and `mds.pwd` options)
-
-Subsequent uses of the blob service simply require mongo to be running.
-
-# S3 driver setup
-- The S3 driver requires a valid id/key pair from your Amazon S3 storage account (no additional metadata storage is used)
-
-## Gateway configuration via config.json
+## Configuration via config.json
+The gateway and its drivers can be configured via config.json which is read at startup. Values that need to be configured are indicated with `<value>`. Drivers are assumed to live under `./drivers/<type>` -- currently only `fs` and `s3` driver types are included.  
 
     {
-      "drivers":[
-        {"fs-sonic" : {
-          "type" : "fs",
-          "option" : {"root" : "/home/sonicwcl/Workspace/data2",
-               "mds" : {
-                  "host" : "127.0.0.1",
-                  "port" : "28100",
-                  "db"   : "test2",
-                  "user" : "sonic1",
-                  "pwd"  : "password1"
-               }
+        "drivers": [
+        {
+            "<fs-driver-name>": {
+                "type": "fs",
+                "option": {
+                    "root": "<pathname for storing blobs>",
+                    "node_exepath": "<optional: path to node executable>",
+                    "gc_exepath": "<optional: path to gc js file, e.g. /<vblob>/blob_fs/fs_gc.js >",
+                    "gc_interval": "<optional: ms per gc execution, e.g. 600000 (10 mins) >",
+                    "gcfc_exepath": "<optional: path to lightweight gc js file, e.g. /<vblob>/blob_fs/fs_gcfc.js >",
+                    "gcfc_interval": "<optional: ms per lightweiht gc execution, e.g. 3000 (3 secs) >",
+                    "gctmp_exepath": "<optional: path to tmp folder gc js file, e.g. /<vblob>/blob_fs/fs_gctmp.js >",
+                    "gctmp_interval": "<optional: ms per tmp folder gc execution, e.g. 1 hr >"
+                }
             }
-          }
         },
-        {"s3-sonic" : {
-          "type" : "s3",
-          "option" : {
-            "key" : "dummy",
-            "secret" : "dummy"
+        {
+            "<s3-driver-name>": {
+                "type": "s3",
+                "option": {
+                    "key": "<s3 key>",
+                    "secret": "<s3 secret>"
+                }
             }
-          }
         }
-      ],
-      "port" : "8080",
-      "default" : "s3-sonic",
-      "logfile" : "/var/vcap/services/blob/instance/log",
-      "keyID" : "dummy",
-      "secretID" : "dummy",
-      "auth" : "enabled"
+        ],
+        "port": "<port>",
+        "current_driver": "<driver-name>",
+        "logtype": "winston",
+        "logfile": "<pathname for the log>",
+        "keyID": "<any id for auth>",
+        "secretID": "<any secret for auth>",
+        "auth": "enabled",
+        "debug": true
     }
 
+`current driver` is used to specify the driver to be used by the service at startup. Only 1 driver can be in use at any time. If no default is specified the first driver will be used.
 
-Each driver must specify its type. Currently `fs` and `s3` are supported. The `option` values depend on the driver type. For `fs`, the option values inlucde the  root directory for storing blobs and the host/port/db/user/password for mongodb. For `s3`, the option values are the s3 key and secret. 
+`logfile` specifies the path to the log file. The `logtype` has to be [winston](https://github.com/indexzero/winston).
 
-`default` is used to specify the driver to be used by the service at startup. Only 1 driver can be in use at any time. If no default is specified the first driver will be used.
+`keyID` and `secretID` and `auth` are used to control front-end authentication. If either the key or id is not present or if auth is not set to "enabled" then authentication is disabled. 
 
-`logfile` specifies the path to log file. 
-
-"keyID" and "secretID" and "auth" are used to control authentication. If either the key or id is not present or if auth is not set to "enabled" then authentication is disabled. 
+`debug` is used to log request and response headers to the console for debugging purposes. Its value is treated as boolean.
 
 ## Usage
 
     node server.js [-f path_to_config_file]
     
+Note that `-f config-path` is optional. The gateway will look for `./config.json`.
+
 ## Testing
 Unit tests depend on vows. To install fetch:
 
@@ -133,6 +122,7 @@ To run testbasic.js, first make sure server.js is configured and running with on
     cd test
     vows testbasic.js --spec
 
+The basic test will fail 3 of the tests when using the FS driver because this driver does not support object enumeration
 
 ## Manual usage with curl
 The following curl commands assume: 
@@ -190,13 +180,42 @@ Currently additional header `range` is supported for single range read as well. 
 
     curl http://localhost:3000/container1/file1.txt -H "range:bytes=123-892" -v
 
-## S3 compatibility
+## Using s3-curl with gateway authentication
 
-There is strong demand for an S3 compatibility. Thus we implement front end APIs to be S3 compatible. This means urls, headers and request bodies are all S3 compatible. At the same time, responses will be S3 compatible as well. For more details see the REST api documentation in the doc directory.
+Instead of using curl with authentication disabled, the gateway can also be accessed in an authenticated fashion via s3-curl.pl which is a utility for making signed requests to s3 available on [aws](http://aws.amazon.com/code/128). 
+
+Credentials for authentication via s3-curl are stored in `.s3curl` as follows
+
+    %awsSecretAccessKeys = (
+
+        # real s3 account
+        s3 => {
+            id => '<s3-id>',
+            key => '<s3-key',
+        },
+
+       gateway => {
+            id => '<gateway-id>',
+            key => '<gateway-key>',
+        },
+    );
+
+Requests are then performed by specifying which credentials to use on the command line. Parameters for `curl` go after the `--`. E.g.
+
+    ./s3curl.pl --id gateway -- -X DELETE -v http://localhost:3000/BucketToDelete
+
+A small modification is required to add the endpoint where the gateway is running to the list of endpoints in the perl script. E.g. if you are running on localhost, you would add localhost to the @endpoints array as follows:
+
+    # begin customizing here
+    my @endpoints = ( 's3.amazonaws.com',
+                      's3-us-west-1.amazonaws.com',
+                      's3-eu-west-1.amazonaws.com',
+                      's3-ap-southeast-1.amazonaws.com',
+                      's3-ap-northeast-1.amazonaws.com',
+                      'localhost' );
 
 ## Server Tuning
 
-When gateway is handling a great amount of concurrent requests, it may open too many file descriptors. It is suggested to increase the file descriptor limit. E.g.: in linux one may type
+When the gateway is handling a large number of concurrent requests, it may open too many file descriptors. It is suggested to increase the file descriptor limit. E.g.: in unix-type systems:
 
     ulimit -n 16384
-
