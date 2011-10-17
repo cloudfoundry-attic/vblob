@@ -13,11 +13,11 @@
 module.exports.is_valid_name = function (name)
 {
   if (name.length < 3 || name.length > 63) { return false; }
-  if (name.match(/(\.\.|-\.|\.-)/g) !== null) { return false; }
-  if (name.match(/([0-9])+\.([0-9])+\.([0-9])+\.([0-9])+/g) !== null) { return false; }
-  if (name.match(/^([a-z]|[0-9])+/) === null) { return false; }
-  if (name.match(/([A-Z])+/g) !== null) { return false; }
-  if (name.match(/\/|\\/g) !== null) { return false; }
-  if (name.match(/-$/g) !== null) { return false; }
+  if (name.match(/\.\.|-\.|\.-|_/) !== null) { return false; }
+  if (name.match(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/) !== null) { return false; }
+  if (name.match(/^[a-z0-9]/) === null) { return false; }
+  if (name.match(/[A-Z]/) !== null) { return false; }
+  if (name.match(/\/|\\/) !== null) { return false; }
+  if (name.match(/-$/) !== null) { return false; }
   return true;
 };
