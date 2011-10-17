@@ -433,6 +433,7 @@ FS_blob.prototype.object_create_meta = function (bucket_name, filename, temp_pat
   var dDate = new Date();
   doc.vblob_update_time = dDate.toString();
   doc.vblob_file_name = filename;
+  //temp_path will be writen twice, to prevent losing information when crash in the middle of an upload
   fs.writeFile(temp_path,JSON.stringify(doc), function(err) {
     if (err) {
       fb.logger.error( ("In creating file "+filename+" meta in bucket_name "+bucket_name+" "+err));
@@ -498,6 +499,7 @@ FS_blob.prototype.object_delete_meta = function (bucket_name, filename, callback
 //step2.1 calc unique hash for key
   var key_fingerprint = get_key_fingerprint(filename);
 //step2.2 gen unique version id
+  //generate a fake version, just a place holder to let gc know there are work to do
   var version_id = generate_version_id(key_fingerprint);
   var prefix1 = key_fingerprint.substr(0,PREFIX_LENGTH), prefix2 = key_fingerprint.substr(PREFIX_LENGTH,PREFIX_LENGTH);
   var file_path = c_path + "/meta/" + prefix1 +"/"+prefix2+"/"+key_fingerprint; //complete representation: /bucket_name/filename

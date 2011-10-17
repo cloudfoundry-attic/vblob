@@ -63,26 +63,21 @@ var driver_start_callback = function (key) {
     var key = Object.keys(dr)[0];
     var value = dr[key];
     driver_order[key] = i;
-    if (config.current_driver !== undefined) {
-      if (config.current_driver.toLowerCase() === key) {value.option.logger = logger; current_driver = drivers[key]=require('./drivers/'+value.type).createDriver(value.option, driver_start_callback(key) );}
-    } else
-    if (current_driver === null) {
+    if (config.current_driver === undefined && current_driver === null ||
+        config.current_driver && config.current_driver.toLowerCase() === key) {
       value.option.logger = logger;
       current_driver = drivers[key] = require('./drivers/'+value.type).createDriver(value.option, driver_start_callback(key) );
     }
   }
-}());
+})();
 
 var hdr_case_conv_table = {"last-modified":"Last-Modified", "accept-ranges":"Accept-Ranges", "content-range":"Content-Range",
 "content-length":"Content-Length", "content-type":"Content-Type",
 "content-encoding":"Content-Encoding", "content-disposition":"Content-Disposition",
-"expires":"Expires", "cache-control":"Cache-Control"};
+"expires":"Expires", "cache-control":"Cache-Control",
+"etag":"ETag", "date":"Date", "server":"Server"};
 // for compatibility, ensure that some response headers match S3 exactly (even though HTTP headers should be case insensitive)
 var normalize_resp_headers = function (headers,method, code, body, stream) {
-  if (headers.etag) {
-    headers.ETag = headers.etag;
-    delete headers.etag;
-  }
   headers.Connection = "close";
   if (headers.connection) { headers.Connection = headers.connection; delete headers.connection; }
   var keys = Object(hdr_case_conv_table);
@@ -98,9 +93,7 @@ var normalize_resp_headers = function (headers,method, code, body, stream) {
   if (body || code === 204) { //xml response, not content-length
     if (headers["Content-Length"]) delete headers["Content-Length"];
   }
-  if (headers.date) { headers.Date = headers.date; delete headers.date; }
   if (!headers.Date) { headers.Date = new Date().toUTCString(); }
-  if (headers.server) { headers.Server = headers.server; delete headers.server; }
   if (!headers.Server) { headers.Server = "Blob Service"; }
   if (!headers["x-amz-request-id"]) headers["x-amz-request-id"] = "1D2E3A4D5B6E7E8F9"; //No actual request id for now
   if (!headers["x-amz-id-2"]) headers["x-amz-id-2"] = "3F+E1E4B1D5A9E2DB6E5E3F5D8E9"; //no actual request id 2
@@ -167,7 +160,6 @@ if (config.account_file)
 {
   try {
     var creds = JSON.parse(fs.readFileSync(config.account_file));
-    credential_hash = null;
     credential_hash = creds;
     if (config.keyID && config.secretID) credential_hash[config.keyID] = config.secretID;
   } catch (err) {
@@ -182,7 +174,6 @@ if (config.account_file)
       {
         //do nothing
       }
-      credential_hash = null;
       credential_hash = creds;
       creds = null;
       if (config.keyID && config.secretID) credential_hash[config.keyID] = config.secretID;
