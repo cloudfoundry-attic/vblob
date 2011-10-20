@@ -74,14 +74,15 @@ var driver_start_callback = function (key) {
 var hdr_case_conv_table = {"last-modified":"Last-Modified", "accept-ranges":"Accept-Ranges", "content-range":"Content-Range",
 "content-length":"Content-Length", "content-type":"Content-Type",
 "content-encoding":"Content-Encoding", "content-disposition":"Content-Disposition",
+"content-language":"Content-Language",
 "expires":"Expires", "cache-control":"Cache-Control",
 "etag":"ETag", "date":"Date", "server":"Server"};
 // for compatibility, ensure that some response headers match S3 exactly (even though HTTP headers should be case insensitive)
 var normalize_resp_headers = function (headers,method, code, body, stream) {
   headers.Connection = "close";
   if (headers.connection) { headers.Connection = headers.connection; delete headers.connection; }
-  var keys = Object(hdr_case_conv_table);
-  for (var idx = 0; idx < hdr_case_conv_table.length; idx++)
+  var keys = Object.keys(hdr_case_conv_table);
+  for (var idx = 0; idx < keys.length; idx++)
     if (headers[keys[idx]]) { headers[hdr_case_conv_table[keys[idx]]] = headers[keys[idx]]; delete headers[keys[idx]]; }
   if (!body && !stream && method !== 'head') {//no response payload, no type
     if (headers["Content-Type"]) delete headers["Content-Type"];

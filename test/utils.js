@@ -22,6 +22,7 @@ module.exports.parse_xml = parse_xml = function(parser,resp,promise)
     acc = true;
     parse_stack.push(cur_obj);
     cur_obj = {};
+    char_buf = '';
   };
   parser.onclosetag = function (name) {
     if (char_buf !== "" ) {
@@ -59,7 +60,7 @@ module.exports.assertStatus = assertStatus = function(code) {
 }
 
 module.exports.api = api = {
-  get: function(path2) {
+  get: function(path2, headers) {
     return function() {
       var promise = new(events.EventEmitter);
       var options = {
@@ -68,6 +69,7 @@ module.exports.api = api = {
         path : path2,
         method : 'GET'
       };
+      if (headers) options.headers = headers;
       var req = http.request(options);
       req.on('error', function(err) { promise.emit('error',err); } );
       req.on('response', function(res) { 
@@ -83,7 +85,7 @@ module.exports.api = api = {
       return promise;
     };
   },
-  put: function(path2) {
+  put: function(path2,headers) {
     return function() {
       var promise = new(events.EventEmitter);
       var options = {
@@ -92,6 +94,7 @@ module.exports.api = api = {
         path : path2,
         method : 'PUT'
       };
+      if (headers) options.headers = headers;
       var req = http.request(options);
       var parser = null;
       req.on('error', function(err) { promise.emit('error',err); } );
@@ -102,7 +105,7 @@ module.exports.api = api = {
             parser = sax.parser(true);
             parse_xml(parser,res,promise);
           }
-          parser.write(chunk);
+          parser.write(chunk.toString());
         });
         res.on('end', function() { parser !== null ? parser.close() : promise.emit('success',res);} ); 
       });
@@ -110,7 +113,7 @@ module.exports.api = api = {
       return promise;
     };
   },
-  del: function(path2) {
+  del: function(path2,headers) {
     return function() {
       var promise = new(events.EventEmitter);
       var options = {
@@ -119,6 +122,7 @@ module.exports.api = api = {
         path : path2,
         method : 'DELETE'
       };
+      if (headers) options.headers = headers;
       var req = http.request(options);
       var parser = null;
       req.on('error', function(err) { promise.emit('error',err); } );
@@ -129,7 +133,7 @@ module.exports.api = api = {
             parser = sax.parser(true);
             parse_xml(parser,res,promise);
           }
-          parser.write(chunk);
+          parser.write(chunk.toString());
         });
         res.on('end', function() { parser !== null ? parser.close() : promise.emit('success',res);} ); 
       });
@@ -137,7 +141,7 @@ module.exports.api = api = {
       return promise;
     };
   },
-  get_data: function(path2) {
+  get_data: function(path2,headers) {
     return function() {
       var promise = new(events.EventEmitter);
       var options = {
@@ -146,11 +150,13 @@ module.exports.api = api = {
         path : path2,
         method : 'GET'
       };
+      if (headers) options.headers = headers;
       var req = http.request(options);
       req.on('error', function(err) { promise.emit('error',err); } );
       req.on('response', function(res) { 
-        res.resp_body = '';
+        res.resp_body = null;
         res.on('data',function(chunk) {
+          if (res.resp_body === null) res.resp_body = '';
           res.resp_body += chunk;
         });
         res.on('end', function() { promise.emit('success',res);} ); 
@@ -159,7 +165,7 @@ module.exports.api = api = {
       return promise;
     };
   },
-  put_data: function(path2,file_path) {
+  put_data: function(path2,file_path, headers) {
     return function() {
       var promise = new(events.EventEmitter);
       var stats = fs.statSync(file_path);
@@ -174,7 +180,10 @@ module.exports.api = api = {
           expect : '100-continue'
         }
       };
-      var stream = fs.createReadStream(file_path);
+      if (headers) {
+        var keys = Object.keys(headers);
+        for (var i = 0; i < keys.length; i++) options.headers[keys[i]] = headers[keys[i]];
+      }
       var req = http.request(options);
       var parser = null;
       req.on('error', function(err) { promise.emit('error',err); } );
@@ -185,10 +194,11 @@ module.exports.api = api = {
             parser = sax.parser(true);
             parse_xml(parser,res,promise);
           }
-          parser.write(chunk);
+          parser.write(chunk.toString());
         });
         res.on('end', function() { parser !== null ? parser.close() : promise.emit('success',res);} ); 
       });
+      var stream = fs.createReadStream(file_path);
       stream.on('data',function(chunk) { req.write(chunk); } );
       stream.on('end',function() { req.end(); } );
       return promise;
