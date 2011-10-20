@@ -35,6 +35,7 @@ function parse_xml(parser,resp_code, resp_header, callback)
     acc = true;
     parse_stack.push(cur_obj);
     cur_obj = {};
+    char_buf = "";
   };
   parser.onclosetag = function (name) {
     if (err) return;
@@ -275,7 +276,7 @@ S3_blob.prototype.object_read = function(bucket_name, filename, options, callbac
       var span = 60;
       cl.region_cache[sp[0]] = {"name":(sp[1]+'.'+sp[2]+'.'+sp[3]), "expire":(new Date().valueOf() + span * 1000) };
     }
-    if (res.statusCode >= 300 && !head) { //only parse when error
+    if (res.statusCode >= 300 && !head && res.statusCode !== 304) { //only parse when error
       res.setEncoding('utf8');
       parser = sax.parser(true);
       parse_xml(parser,resp_code, resp_header,callback);

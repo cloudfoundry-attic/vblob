@@ -703,7 +703,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
     if (date_modified) {
       t1 = new Date(date_modified).valueOf();
       t2 = new Date(obj.vblob_update_time).valueOf();
-      modified_since = t2 > t1;
+      modified_since = t2 > t1 || t1 > new Date().valueOf(); //make sure the timestamp is not in the future
     } else if (date_unmodified) {
       t1 = new Date(date_unmodified).valueOf();
       t2 = new Date(obj.vblob_update_time).valueOf();
@@ -720,10 +720,10 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
         etag_none_match && etag_none_match === obj.vblob_file_etag)
     {
       error_msg(304,'NotModified','The object is not modified',resp);
-      callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+      callback(resp.resp_code, resp.resp_header, /*resp.resp_body*/ null, null); //304 should not have body
       return;
     }
-    header["Content-Type"] = obj["content-type"] ? obj["content-type"] :  "binary/octet-stream";
+    header["content-type"] = obj["content-type"] ? obj["content-type"] :  "binary/octet-stream";
     header["Content-Length"] = obj.vblob_file_size;
     header["Last-Modified"] = obj.vblob_update_time;
     header.ETag = obj.vblob_file_etag;
