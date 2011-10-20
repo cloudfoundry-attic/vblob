@@ -156,7 +156,7 @@ exports.canonicalizeResource = function(resource){
   var buf = urlObj.pathname;
   var qbuf = [];
   Object.keys(urlObj.query).forEach(function (qs) {
-    if (['acl', 'location', 'logging', 'notification', 'partNumber', 'policy', 'requestPayment', 'torrent', 'uploadId', 'uploads', 'versionId', 'versioning', 'versions', 'website','response-content-type', 'response-content-language','response-expires','reponse-cache-control','response-content-disposition','response-content-encoding'].indexOf(qs) !== -1) {
+    if (['acl', 'location', 'logging', 'notification', 'partNumber', 'policy', 'requestPayment', 'torrent', 'uploadId', 'uploads', 'versionId', 'versioning', 'versions', 'website','response-content-type', 'response-content-language','response-expires','response-cache-control','response-content-disposition','response-content-encoding'].indexOf(qs) !== -1) {
     qbuf.push(qs + (urlObj.query[qs] !== '' ? '=' + /*encodeURIComponent*/(urlObj.query[qs]) : ''));
     }
   });

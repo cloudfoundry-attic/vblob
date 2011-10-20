@@ -37,7 +37,7 @@ function j2x(src,lev,namespace,indent)
         dest += ' xmlns="'+namespace+'"';
       }
       dest += '>';
-      dest += j2x(val[idx2],lev+1);
+      dest += j2x(val[idx2],lev+1,namespace,indent);
       lev2 = lev; bit=0;
       if (indent === undefined || dest.charAt(dest.length-1) !== '\n') { lev2 = 0; }
       while (lev2 > 0) {

@@ -580,6 +580,7 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
     if (err) {
       error_msg(404,"NoSuchFile",err,resp);
       callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+      return;
     }
     var obj = JSON.parse(data);
     if (true) {
@@ -589,7 +590,7 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
       if (date_modified) {
         t1 = new Date(date_modified).valueOf();
         t2 = new Date(obj.vblob_update_time).valueOf();
-        check_modified = t2 > t1;
+        check_modified = t2 > t1 || t1 >  new Date().valueOf();
       } else if (date_unmodified) {
         t1 = new Date(date_unmodified).valueOf();
         t2 = new Date(obj.vblob_update_time).valueOf();
@@ -636,9 +637,10 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
           if (key.match(/^x-amz-meta-/i)) {
             var key2 = key.replace(/^x-amz-meta-/i,"vblob_meta_");
             dest_obj[key2] = metadata[key];
-          } else dest_obj[key] = metadata[key];
+          } else if (!key.match(/^content-length/i)) dest_obj[key] = metadata[key];
         }
       }
+      dest_obj.vblob_file_size = obj.vblob_file_size; //not to override content-length!!
       //new object meta constructed, ready to create links etc.
       if (!create_prefix_folders([c_path+"/blob",prefix1,prefix2],callback)) return;
       if (!create_prefix_folders([c_path+"/versions", prefix1,prefix2],callback)) return;
@@ -703,7 +705,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
     if (date_modified) {
       t1 = new Date(date_modified).valueOf();
       t2 = new Date(obj.vblob_update_time).valueOf();
-      modified_since = t2 > t1;
+      modified_since = t2 > t1 || t1 > new Date().valueOf(); //make sure the timestamp is not in the future
     } else if (date_unmodified) {
       t1 = new Date(date_unmodified).valueOf();
       t2 = new Date(obj.vblob_update_time).valueOf();
@@ -720,10 +722,11 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
         etag_none_match && etag_none_match === obj.vblob_file_etag)
     {
       error_msg(304,'NotModified','The object is not modified',resp);
-      callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+      resp.resp_header.etag = obj.vblob_file_etag; resp.resp_header["last-modified"] = obj.vblob_update_time; 
+      callback(resp.resp_code, resp.resp_header, /*resp.resp_body*/ null, null); //304 should not have body
       return;
     }
-    header["Content-Type"] = obj["content-type"] ? obj["content-type"] :  "binary/octet-stream";
+    header["content-type"] = obj["content-type"] ? obj["content-type"] :  "binary/octet-stream";
     header["Content-Length"] = obj.vblob_file_size;
     header["Last-Modified"] = obj.vblob_update_time;
     header.ETag = obj.vblob_file_etag;
@@ -734,6 +737,9 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
         var sub_key = obj_key.substr(11);
         sub_key = "x-amz-meta-" + sub_key;
         header[sub_key] = obj[obj_key];
+      } else if (obj_key.match(/^vblob_/) === null) {
+        //other standard attributes
+        header[obj_key] = obj[obj_key];
       }
     }
     //override with response-xx
@@ -749,12 +755,19 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
     var st;
     if (range !== null && range !== undefined) {
       header["Content-Range"] = "bytes "+ (range.start!==undefined?range.start:"")+'-'+(range.end!==undefined?range.end.toString():"") + "/"+obj.vblob_file_size.toString();
-      if (range.start === undefined) { range.start = file_size - range.end; delete range.end; }
-      if (range.end === undefined) { range.end = file_size-1; }
+      if (range.start === undefined) { range.start = obj.vblob_file_size - range.end; delete range.end; }
+      if (range.end === undefined) { range.end = obj.vblob_file_size-1; }
       header["Content-Length"] = range.end - range.start + 1;
       //resp.writeHeader(206,header);
       resp_code = 206; resp_header = header;
       if (verb==="get") { //TODO: retry for range read?
+        if (range.start < 0 || range.start > range.end ||
+            range.start > obj.vblob_file_size-1 || range.end > obj.vblob_file_size-1)
+        {
+          error_msg(416,'InvalidRange','The requested range is not satisfiable',resp);
+          callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+          return;
+        }
         st = fs.createReadStream(obj.vblob_file_path, range);
         st.on('error', function(err) {
           console.log(err);
@@ -765,7 +778,16 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
         st.on('open', function(fd) {
           callback(resp_code, resp_header, null, st);
         });
-      } else { callback(resp_code, resp_header, null, null); }
+      } else { 
+        if (range.start < 0 || range.start > range.end ||
+            range.start > obj.vblob_file_size-1 || range.end > obj.vblob_file_size-1)
+        {
+          error_msg(416,'InvalidRange','The requested range is not satisfiable',resp);
+          callback(resp.resp_code, resp.resp_header, null, null);
+          return;
+        }
+        callback(resp_code, resp_header, null, null); 
+      }
     } else {
       resp_code = 200; resp_header = header;
       //resp.writeHeader(200,header);
@@ -868,6 +890,7 @@ FS_Driver.prototype.object_read = function(bucket_name,object_key,options,callba
       if (m[2] !== '') { range1.end = parseInt(m[2],10); }
     }
     this.client.logger.debug( ("Final range: "+util.inspect(range1)));
+    options.range = range1;
   }
   this.client.object_read(bucket_name, object_key, options, callback, this.client);
 };

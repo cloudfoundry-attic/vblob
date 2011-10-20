@@ -6,7 +6,7 @@
 
 exports.to_query_string = function(options) {
  if (options === null || options === undefined) { return ''; }
- var filter = ['acl','notification','partNumber','policy','requestPayment','torrent', 'uploadId', 'uploads', 'versionId', 'versioning', 'versions', 'website','prefix','max-keys','marker','delimiter','location','logging','response-content-type', 'response-content-language','response-expires','reponse-cache-control','response-content-disposition','response-content-encoding'];
+ var filter = ['acl','notification','partNumber','policy','requestPayment','torrent', 'uploadId', 'uploads', 'versionId', 'versioning', 'versions', 'website','prefix','max-keys','marker','delimiter','location','logging','response-content-type', 'response-content-language','response-expires','response-cache-control','response-content-disposition','response-content-encoding'];
  var keys = Object.keys(options);
  var query_string = '';
  for (var i = 0, len = keys.length; i < len; ++i) {
@@ -14,7 +14,7 @@ exports.to_query_string = function(options) {
    var lkey = key.toLowerCase();
    if (filter.indexOf(lkey) !== -1) {
      if (query_string === '') { query_string += '?'; } else { query_string += '&'; }
-     query_string += lkey + (options[key]?('=' + options[key]):"");
+     query_string += lkey + (options[key]?('=' + encodeURIComponent(options[key])):"");
    }
  }
  return query_string;
