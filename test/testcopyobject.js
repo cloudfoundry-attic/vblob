@@ -17,7 +17,7 @@ var suite = vows.describe('testcopyobject: using bucket '+bucket_name+' against 
 var parse_xml = require('./utils').parse_xml;
 var assertStatus = require('./utils').assertStatus;
 var api = require('./utils').api;
-var sax = require('../drivers/s3/sax-js/lib/sax');
+var sax = require('sax');
 var util = require('util');
 var XMLNS = "http://s3.amazonaws.com/doc/2006-03-01/";
 

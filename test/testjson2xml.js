@@ -9,7 +9,7 @@ var j2x = require('../common/json2xml').json2xml;
 var events = require('events');
 var suite = vows.describe('testjson2xml: testing conversion between json and xml');
 var parse_xml = require('./utils').parse_xml;
-var sax = require('../drivers/s3/sax-js/lib/sax');
+var sax = require('sax');
 var util = require('util');
 var XMLNS = "http://s3.amazonaws.com/doc/2006-03-01/";
 suite.addBatch({

@@ -1,3 +1,0 @@
-[submodule "drivers/s3/sax-js"]
-	path = drivers/s3/sax-js
-	url = https://github.com/isaacs/sax-js.git

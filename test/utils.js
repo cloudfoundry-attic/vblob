@@ -2,7 +2,7 @@ var events = require('events');
 var http = require('http');
 var assert = require('assert');
 var fs = require('fs');
-var sax = require('../drivers/s3/sax-js/lib/sax');
+var sax = require('sax');
 var config = JSON.parse(fs.readFileSync('../config.json')); //must be the config you actually use for the vblob  instance
 
 module.exports.parse_xml = parse_xml = function(parser,resp,promise)
