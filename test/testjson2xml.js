@@ -1,4 +1,6 @@
 /*
+Copyright (c) 2011 VMware, Inc.
+
   test validity of conversion between json and xml
 */
 var util = require('util');

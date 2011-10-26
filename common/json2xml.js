@@ -1,3 +1,6 @@
+/*
+Copyright (c) 2011 VMware, Inc.
+*/
 var indent_level = ['  ','    ','        ','                ']; //2^1,2^2,2^3,2^4, should be enough
 var specialChars=["&","<",">",'"',"'"];
 var validChars = ["&amp;","&lt;","&gt;","&quot;","&apos;"];

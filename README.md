@@ -1,4 +1,7 @@
 # node.js blob service gateway.
+
+Copyright (c) 2011 VMware, Inc.
+
 The blob service provides an S3-compatible HTTP endpoint to an underlying storage provider. A driver model is used for different providers. Currently the available drivers include S3 (Amazon web services) or a local file system (FS) driver.
 
 ## Authors

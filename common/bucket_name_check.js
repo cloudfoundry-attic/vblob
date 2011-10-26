@@ -1,5 +1,7 @@
 /*
-  Rules:
+Copyright (c) 2011 VMware, Inc.
+  
+Rules:
     1. no capital letters (to be able to use virtual host)
     2. starting with lower case letters or numbers
     3. 3 ~ 63 chars

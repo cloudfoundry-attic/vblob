@@ -1,4 +1,6 @@
 /*
+Copyright (c) 2011 VMware, Inc.
+
 get_hdrs = [ 'if-modified-since','if-unmodified-since', 'if-match', 'if-none-match'];
 get_qrys = [ 'response-content-type', 'response-content-language', 'response-expires',
 'response-cache-control', 'response-content-disposition', 'response-content-encoding'];

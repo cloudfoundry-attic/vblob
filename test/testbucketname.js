@@ -1,4 +1,6 @@
 /*
+Copyright (c) 2011 VMware, Inc.
+
   test validity of bucket names
 */
 var util = require('util');

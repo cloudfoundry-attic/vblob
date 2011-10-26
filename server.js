@@ -1,5 +1,5 @@
 /*
-  Additional modules: express
+Copyright (c) 2011 VMware, Inc.
 */
 var Logger = require('./common/logger').Logger; //logging module
 var valid_name = require('./common/bucket_name_check').is_valid_name; //bucket name check

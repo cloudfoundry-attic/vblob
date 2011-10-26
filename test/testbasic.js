@@ -1,4 +1,6 @@
 /*
+Copyright (c) 2011 VMware, Inc.
+
   Basic test for basic vblob features: 
   - get buckets
   - get bucket

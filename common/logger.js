@@ -1,3 +1,6 @@
+/*
+Copyright (c) 2011 VMware, Inc.
+*/
 //logger type is a string specifying the logger type name;  logger_file is a string pointing the where the log should be written
 //logger_file not defined means writing to stdout
 function Logger(logger_type, logger_file)

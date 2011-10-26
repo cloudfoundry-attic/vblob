@@ -1,3 +1,8 @@
+/*!		
+* Copyright(c) 2010 LearnBoost <dev@learnboost.com>		
+* Portions Copyright (c) 2011 VMware, Inc.
+* MIT Licensed		
+*/
 var utils = require('./s3/utils');
 var auth = require('./s3/auth');
 var join = require('path').join;

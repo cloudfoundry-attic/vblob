@@ -1,5 +1,6 @@
 /*
-  Additional library: sax-js xml parser: https://github.com/isaacs/sax-js.git (subject to change)
+Copyright (c) 2011 VMware, Inc.
+
   Need amazon s3 id/key pair
 */
 var s3client = require('./s3client/client');

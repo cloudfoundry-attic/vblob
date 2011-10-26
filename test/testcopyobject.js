@@ -1,4 +1,6 @@
 /*
+Copyright (c) 2011 VMware, Inc.
+
  put_hdrs = [ 'cache-control', 'content-disposition', 'content-encoding', 'content-length',
 'content-type', 'expires'];
  copy_hdrs = [ 'x-amz-copy-source-if-match', 'x-amz-copy-source-if-none-match',

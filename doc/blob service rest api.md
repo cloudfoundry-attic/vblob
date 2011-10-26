@@ -1,4 +1,7 @@
 # Blob Service REST API
+
+Copyright (c) 2011 VMware, Inc.
+
 This document describes the REST api supported by the [Blob service] for accessing objects and buckets from Cloud Foundry applications. Please refer to the project readme.md if you are looking for instructions on how to deploy and use the Blob service as a standalone process without using the Cloud Foundry infrastructure.
 
 ## Introduction

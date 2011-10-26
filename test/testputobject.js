@@ -1,4 +1,6 @@
 /*
+Copyright (c) 2011 VMware, Inc.
+
  put_hdrs = [ 'cache-control', 'content-disposition', 'content-encoding', 'content-length',
 'content-type', 'expires'];
  put_opts = ['content-md5','x-amz-storage-class'];

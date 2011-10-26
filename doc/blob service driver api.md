@@ -1,5 +1,7 @@
 # Blob Service driver API
 
+Copyright (c) 2011 VMware, Inc.
+
 ## constructor
 
     driver = createDriver(options, callback)

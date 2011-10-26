@@ -1,6 +1,6 @@
 /*
-  Author: wangs@vmware.com
-  Set the root dir of the blob, e.g.: var fb = new FS_blob("/mnt/sdb1/tmp");
+Copyright (c) 2011 VMware, Inc.
+Author: wangs@vmware.com
 */
 var fs = require('fs');
 var Path = require('path');

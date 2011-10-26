@@ -1,3 +1,6 @@
+/*
+Copyright (c) 2011 VMware, Inc.
+*/
 var events = require('events');
 var http = require('http');
 var assert = require('assert');

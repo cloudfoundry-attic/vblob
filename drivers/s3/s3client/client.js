@@ -1,6 +1,7 @@
 /*!		
 * knox - client		
 * Copyright(c) 2010 LearnBoost <dev@learnboost.com>		
+* Portions Copyright (c) 2011 VMware, Inc.
 * MIT Licensed		
 */
 

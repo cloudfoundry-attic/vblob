@@ -1,3 +1,6 @@
+/*
+Copyright (c) 2011 VMware, Inc.
+*/
 var fs = require('fs');
 var events = require("events");
 var exec = require('child_process').exec;
