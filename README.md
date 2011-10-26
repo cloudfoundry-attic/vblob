@@ -18,11 +18,12 @@ The blob service provides an S3-compatible HTTP endpoint to an underlying storag
 - see [doc](doc) directory
 
 ## Dependencies
-- Express, web framework 
-- Winston, logging module
+The following 3rd party npm modules have been included in the node_modules subdirectory
 
-## Submodules
-- sax-js: xml parser
+- express: web framework 
+- winston: logging module
+- sax: xml parser
+- vows: test framework
 
 ## Installing node.js
 The blob service depends on [node.js](http://nodejs.org/). We are working with the v0.4 branch and v0.4.12 tag.  
@@ -46,8 +47,6 @@ Most node.js applications require modules distributed via npm. Instructions for 
 
     $> git clone <project-url> <target-directory>
     $> cd <target-directory>
-    $> git submodule init
-    $> git submodule update
     $> cp config.json.sample config.json
     
 now edit `config.json`
@@ -113,28 +112,25 @@ The gateway and its drivers can be configured via config.json which is read at s
 Note that `-f config-path` is optional. The gateway will look for `./config.json`.
 
 ## Testing
-Unit tests depend on vows. To install fetch:
-
-    npm install -g vows
-    
-To run testbasic.js, first make sure server.js is configured and running with one of the drivers, then
+To run the full set of unit tests, first make sure server.js is configured and running with one of the drivers, then
 
     cd test
-    vows testbasic.js --spec
+    ../node_modules/vows/bin/vows test*.js --spec
 
-The basic test will fail 3 of the tests when using the FS driver because this driver does not support object enumeration
-
+NOTE: To install vows globally, use `npm install -g vows`  
+        
 ## Manual usage with curl
-The following curl commands assume: 
+The following curl commands assume:
 
 - authentication is NOT enabled. (set `"auth":"disabled"` in config.json) 
 - the node.js process is running on localhost and listening on port 3000.
 
-### Listing buckets
+### Listing all buckets
 
     curl http://localhost:3000 -v
 
-### Listing a bucket
+### Listing objects in a bucket
+(This feature is only enabled for the s3 driver)
   
     curl http://localhost:3000/container1 -v
 
