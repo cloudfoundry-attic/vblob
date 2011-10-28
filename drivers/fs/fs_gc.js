@@ -45,7 +45,7 @@ buck.on('gc',function(buck_idx) {
                   fs.readFile(file1,function(err2,data) {
                     if (!err2) {
                       var obj = JSON.parse(data);
-                      fs.unlink(obj.vblob_file_path,function() {} );
+                      fs.unlink(root_path+"/"+evt.Bucket+"/"+obj.vblob_file_path,function() {} );
                     }
                     fs.unlink(file1,function() {} );
                     if (evt2.counter > 0) evt2.emit('next',idx2+1); else

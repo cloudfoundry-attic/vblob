@@ -332,7 +332,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
   var prefix_path = prefix1 + "/" + prefix2 + "/";
   var temp_path = c_path + "/" + TEMP_FOLDER +"/" + version_id;
   var blob_path = c_path + "/blob/" + prefix_path + version_id;
-  var meta_json = { vblob_file_name : filename, vblob_file_path : blob_path };
+  var meta_json = { vblob_file_name : filename, vblob_file_path : "blob/"+prefix_path+version_id };
   fs.writeFileSync(temp_path, JSON.stringify(meta_json));
 //step 3.1 create folders is needed
   if (!create_prefix_folders([c_path+"/blob",prefix1,prefix2],callback)) return;
@@ -375,7 +375,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
   stream.on("close", function() {
     fb.logger.debug( ("close write stream "+filename));
     md5_etag = md5_etag.digest('hex');
-    var opts = {vblob_file_name: filename, vblob_file_path: blob_path, vblob_file_etag : md5_etag, vblob_file_size : file_size, vblob_file_version : version_id, vblob_file_fingerprint : key_fingerprint};
+    var opts = {vblob_file_name: filename, vblob_file_path: "blob/"+prefix_path+version_id, vblob_file_etag : md5_etag, vblob_file_size : file_size, vblob_file_version : version_id, vblob_file_fingerprint : key_fingerprint};
     if (create_options['content-md5']) {
       //check if content-md5 matches
       md5_base64 = hex2base64(md5_etag);
@@ -616,7 +616,7 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
       if (obj["expires"]) dest_obj["expires"] = obj["expires"];
       dest_obj.vblob_file_version = version_id;
       dest_obj.vblob_file_fingerprint = key_fingerprint;
-      dest_obj.vblob_file_path = blob_path;
+      dest_obj.vblob_file_path = "blob/"+prefix_path+version_id;//blob_path;
       keys = Object.keys(obj);
       if (meta_dir === 'COPY') {
         if (source_bucket === bucket_name && source_file === filename) {
@@ -651,7 +651,7 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
           callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
           return;
         }
-        fs.link(obj.vblob_file_path, dest_obj.vblob_file_path, function(err) {
+        fs.link(src_path+"/"+obj.vblob_file_path, c_path+"/"+dest_obj.vblob_file_path, function(err) {
           if (err) {
             error_msg(500,"InternalError",""+err,resp);
             callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
@@ -768,7 +768,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
           callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
           return;
         }
-        st = fs.createReadStream(obj.vblob_file_path, range);
+        st = fs.createReadStream(c_path+"/"+obj.vblob_file_path, range);
         st.on('error', function(err) {
           console.log(err);
           st.destroy();
@@ -792,7 +792,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
       resp_code = 200; resp_header = header;
       //resp.writeHeader(200,header);
       if (verb==="get") {
-        st = fs.createReadStream(obj.vblob_file_path);
+        st = fs.createReadStream(c_path+"/"+obj.vblob_file_path);
         st.on('error', function(err) {//RETRY??
           st.destroy();
           fb.logger.error( ("file "+obj.vblob_file_version+" is purged by gc already!"));
