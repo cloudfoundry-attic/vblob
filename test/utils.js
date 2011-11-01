@@ -191,6 +191,7 @@ module.exports.api = api = {
       var parser = null;
       req.on('error', function(err) { promise.emit('error',err); } );
       req.on('response', function(res) { 
+        req.ended = true;
         res.resp_body = null;
         res.on('data',function(chunk) {
           if (parser === null) {
@@ -202,8 +203,8 @@ module.exports.api = api = {
         res.on('end', function() { parser !== null ? parser.close() : promise.emit('success',res);} ); 
       });
       var stream = fs.createReadStream(file_path);
-      stream.on('data',function(chunk) { req.write(chunk); } );
-      stream.on('end',function() { req.end(); } );
+      stream.on('data',function(chunk) { if (!req.ended) req.write(chunk); } );
+      stream.on('end',function() { if (!req.ended) req.end(); } );
       return promise;
     };
   }
