@@ -13,6 +13,7 @@ var MAX_LIST_LENGTH = 1000; //max number of objects to list
 var base64_char_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 var TEMP_FOLDER = "~tmp";
 var GC_FOLDER = "~gc";
+var MAX_COPY_RETRY = 3;
 
 var gc_hash = {}; //for caching gc info;
 
@@ -524,7 +525,7 @@ FS_blob.prototype.object_delete_meta = function (bucket_name, filename, callback
   });
 };
 
-FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,source_file,options, metadata, callback,fb)
+FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,source_file,options, metadata, callback,fb, retry_cnt)
 {
   var resp = {};
 //step 1 check bucket existence
@@ -578,6 +579,11 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
   //read src meta here
   fs.readFile(src_meta_path, function(err,data) {
     if (err) {
+      if (!retry_cnt) retry_cnt = 0;
+      if (retry_cnt < MAX_COPY_RETRY) { //reduce the false negative rate
+        setTimeout(function(fb1) { fb1.object_copy(bucket_name, filename, source_bucket, source_file, options, metadata, callback,fb1, !retry_cnt?1:retry_cnt+1); }, Math.floor(Math.random()*1000) + 100,fb);
+        return;
+      }
       error_msg(404,"NoSuchFile",err,resp);
       callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
       return;
@@ -653,6 +659,12 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
         }
         fs.link(src_path+"/"+obj.vblob_file_path, c_path+"/"+dest_obj.vblob_file_path, function(err) {
           if (err) {
+            remove_uploaded_file(temp_path);
+            if (!retry_cnt) retry_cnt = 0;
+            if (retry_cnt < MAX_COPY_RETRY) { //reduce the false negative rate
+              setTimeout(function(fb1) { fb1.object_copy(bucket_name, filename, source_bucket, source_file, options, metadata, callback,fb1, !retry_cnt?1:retry_cnt+1); }, Math.floor(Math.random()*1000) + 100,fb);
+              return;
+            }
             error_msg(500,"InternalError",""+err,resp);
             callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
             return;
