@@ -180,6 +180,19 @@ if (config.account_file)
       if (config.keyID && config.secretID) credential_hash[config.keyID] = config.secretID;
     }, 1000);
   if (config.account_api && config.account_api === true) {
+    var encoded_creds = (function(){
+      var buff = new Buffer(config.keyID+":"+config.secretID);
+      return "Basic " + buff.toString("base64");
+      })();
+    var basic_auth = function(req,res,next) {
+      if (req.headers.authorization !== encoded_creds) {
+        logger.error("req.auth: "+req.headers.authorization+" encoded_creds: "+encoded_creds);
+        general_resp(res,null,req.method.toLowerCase())(401,{},{Error:{Code:"Unauthorized",Message:"Credentials do not match"}}, null);
+        return;
+      }
+      next();
+    };
+    app.put('/~bind[/]{0,1}$', basic_auth);
     app.put('/~bind[/]{0,1}$', function(req,res) {
       var obj_str = "";
       req.on('data', function(chunk) { obj_str += chunk.toString();
@@ -216,6 +229,7 @@ if (config.account_file)
         }
       });
     });
+    app.get('/~bind[/]{0,1}$', basic_auth); 
     app.get('/~bind[/]{0,1}$', function(req,res) { //get all bindings for CF
       var tmp_fn = '/tmp/get-bind-'+new Date().valueOf()+'-'+Math.floor(Math.random()*10000);
       try {
@@ -229,6 +243,7 @@ if (config.account_file)
         general_resp(res,null,req.method.toLowerCase())(200,{},null, st);
       });
     });
+    app.put('/~unbind[/]{0,1}$', basic_auth);
     app.put('/~unbind[/]{0,1}$', function(req,res) {
       var obj_str = "";
       req.on('data', function(chunk) { obj_str += chunk.toString();
