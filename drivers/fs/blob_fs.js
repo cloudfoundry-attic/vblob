@@ -665,7 +665,7 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
   });
 };
 
-FS_blob.prototype.object_read = function (bucket_name, filename, options, callback, fb)
+FS_blob.prototype.object_read = function (bucket_name, filename, options, callback, fb, read_again)
 {
   var range = options.range;
   var verb = options.method;
@@ -694,7 +694,14 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
   }
   //read meta here
   fs.readFile(file_path,function (err, data) {
-    if (err) { error_msg(404,"NoSuchFile",err,resp); callback(resp.resp_code, resp.resp_header, resp.resp_body, null); return; }
+    if (err) { 
+      //link is atomic, but re-link is two-step; re-query once to reduce the false negative rate
+      if (read_again === undefined) {
+        setTimeout(function(fb1) { fb1.object_read(bucket_name, filename, options, callback,fb1, true); }, Math.floor(Math.random()*1000) + 100,fb); 
+        return;
+      }
+      error_msg(404,"NoSuchFile",err,resp); callback(resp.resp_code, resp.resp_header, resp.resp_body, null); return; 
+    }
     var obj = JSON.parse(data);
     var header = common_header();
 //    if (file_size !== obj.vblob_file_size) {
@@ -798,7 +805,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
           fb.logger.error( ("file "+obj.vblob_file_version+" is purged by gc already!"));
           //error_msg(508,'SlowDown','The object is being updated too frequently, try later',resp);
           //callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
-          setTimeout(function(fb1) { fb1.object_read(bucket_name, filename, options, callback,fb1); }, Math.floor(Math.random()*1000) + 100,fb);
+          setTimeout(function(fb1) { fb1.object_read(bucket_name, filename, options, callback,fb1, true); }, Math.floor(Math.random()*1000) + 100,fb);
         });
         st.on('open', function(fd) {
           callback(resp_code, resp_header, null, st);

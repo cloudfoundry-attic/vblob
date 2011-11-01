@@ -166,9 +166,9 @@ if (config.account_file)
   } catch (err) {
     //do nothing
   }
-  fs.watchFile(config.account_file, function(cur,prev) {
-    if (cur.mtime !== prev.mtime){
-      var creds={};
+  //set interval
+  setInterval(function() {
+    var creds={};
       try {
         creds = JSON.parse(fs.readFileSync(config.account_file));
       } catch(err)
@@ -178,9 +178,7 @@ if (config.account_file)
       credential_hash = creds;
       creds = null;
       if (config.keyID && config.secretID) credential_hash[config.keyID] = config.secretID;
-      //console.log(require('util').inspect(credential_hash, false, 2));
-    }
-  });
+    }, 1000);
   if (config.account_api && config.account_api === true) {
     app.put('/~bind[/]{0,1}$', function(req,res) {
       var obj_str = "";
