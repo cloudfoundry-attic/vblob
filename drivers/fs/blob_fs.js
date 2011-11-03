@@ -14,6 +14,7 @@ var base64_char_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 var TEMP_FOLDER = "~tmp";
 var GC_FOLDER = "~gc";
 var MAX_COPY_RETRY = 3;
+var MAX_READ_RETRY = 3;
 
 var gc_hash = {}; //for caching gc info;
 
@@ -581,7 +582,7 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
     if (err) {
       if (!retry_cnt) retry_cnt = 0;
       if (retry_cnt < MAX_COPY_RETRY) { //reduce the false negative rate
-        setTimeout(function(fb1) { fb1.object_copy(bucket_name, filename, source_bucket, source_file, options, metadata, callback,fb1, !retry_cnt?1:retry_cnt+1); }, Math.floor(Math.random()*1000) + 100,fb);
+        setTimeout(function(fb1) { fb1.object_copy(bucket_name, filename, source_bucket, source_file, options, metadata, callback,fb1, retry_cnt+1); }, Math.floor(Math.random()*1000) + 100,fb);
         return;
       }
       error_msg(404,"NoSuchFile",err,resp);
@@ -660,13 +661,7 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
         fs.link(src_path+"/"+obj.vblob_file_path, c_path+"/"+dest_obj.vblob_file_path, function(err) {
           if (err) {
             remove_uploaded_file(temp_path);
-            if (!retry_cnt) retry_cnt = 0;
-            if (retry_cnt < MAX_COPY_RETRY) { //reduce the false negative rate
-              setTimeout(function(fb1) { fb1.object_copy(bucket_name, filename, source_bucket, source_file, options, metadata, callback,fb1, !retry_cnt?1:retry_cnt+1); }, Math.floor(Math.random()*1000) + 100,fb);
-              return;
-            }
-            error_msg(500,"InternalError",""+err,resp);
-            callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+            setTimeout(function(fb1) { fb1.object_copy(bucket_name, filename, source_bucket, source_file, options, metadata, callback,fb1); }, Math.floor(Math.random()*1000) + 100,fb);
             return;
           }
           //ready to call object_create_meta
@@ -677,7 +672,7 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
   });
 };
 
-FS_blob.prototype.object_read = function (bucket_name, filename, options, callback, fb, read_again)
+FS_blob.prototype.object_read = function (bucket_name, filename, options, callback, fb, retry_cnt)
 {
   var range = options.range;
   var verb = options.method;
@@ -708,8 +703,9 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
   fs.readFile(file_path,function (err, data) {
     if (err) { 
       //link is atomic, but re-link is two-step; re-query once to reduce the false negative rate
-      if (read_again === undefined) {
-        setTimeout(function(fb1) { fb1.object_read(bucket_name, filename, options, callback,fb1, true); }, Math.floor(Math.random()*1000) + 100,fb); 
+      if (!retry_cnt) retry_cnt = 0;
+      if (retry_cnt < MAX_READ_RETRY) {
+        setTimeout(function(fb1) { fb1.object_read(bucket_name, filename, options, callback,fb1, retry_cnt+1); }, Math.floor(Math.random()*1000) + 100,fb); 
         return;
       }
       error_msg(404,"NoSuchFile",err,resp); callback(resp.resp_code, resp.resp_header, resp.resp_body, null); return; 
@@ -817,7 +813,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
           fb.logger.error( ("file "+obj.vblob_file_version+" is purged by gc already!"));
           //error_msg(508,'SlowDown','The object is being updated too frequently, try later',resp);
           //callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
-          setTimeout(function(fb1) { fb1.object_read(bucket_name, filename, options, callback,fb1, true); }, Math.floor(Math.random()*1000) + 100,fb);
+          setTimeout(function(fb1) { fb1.object_read(bucket_name, filename, options, callback,fb1); }, Math.floor(Math.random()*1000) + 100,fb);
         });
         st.on('open', function(fd) {
           callback(resp_code, resp_header, null, st);
