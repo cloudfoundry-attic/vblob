@@ -99,7 +99,7 @@ function start_gc(option,fb)
   //gc from cache
   var gcfc_status = 0;
   fb.gcfcid = setInterval(function() {
-    if (gcfc_status === 1) return;
+    if (gcfc_status === 1 || gc_hash === null || Object.keys(gc_hash).length === 0) return; //optimization to avoid empty loop
     gcfc_status = 1;
     var tmp_fn = "/tmp/gcfc-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000);
     var tmp_hash = gc_hash;
