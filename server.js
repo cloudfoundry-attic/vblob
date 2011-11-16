@@ -102,7 +102,8 @@ var normalize_resp_headers = function (headers,method, code, body, stream) {
 
 var general_resp = function (res,post_proc,verb) {//post_proc is for post-processing response body
   return function (resp_code, resp_header, resp_body, resp_data) {
-    if (res.client_closed) { return; }
+    if (res.client_closed || res.already_sent) { return; }
+    res.already_sent = true;
     var headers = resp_header;
     var xml_body = "";
     if (resp_body) {

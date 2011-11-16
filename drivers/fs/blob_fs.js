@@ -352,7 +352,8 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
       callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
     }
     data.destroy();
-    stream.destroy();
+    stream = null;
+    //stream.destroy();
   });
   data.on("error", function (err) {
     if (resp !== null) {
@@ -374,7 +375,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
     stream.end();
     stream.destroySoon();
   });
-  stream.on("close", function() {
+  stream.once("close", function() {
     fb.logger.debug( ("close write stream "+filename));
     md5_etag = md5_etag.digest('hex');
     var opts = {vblob_file_name: filename, vblob_file_path: "blob/"+prefix_path+version_id, vblob_file_etag : md5_etag, vblob_file_size : file_size, vblob_file_version : version_id, vblob_file_fingerprint : key_fingerprint};
@@ -409,7 +410,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
   });
   if (data.connection) // copy stream does not have connection
   {
-    data.connection.on('close',function() {
+    data.connection.once('close',function() {
       fb.logger.debug( ('client disconnect'));
       if (data.upload_end === true) { return; }
       fb.logger.warn( ('interrupted upload: ' + filename));
@@ -701,7 +702,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
   }
   //read meta here
   fs.readFile(file_path,function (err, data) {
-    if (err) { 
+    if (err) {
       //link is atomic, but re-link is two-step; re-query once to reduce the false negative rate
       if (!retry_cnt) retry_cnt = 0;
       if (retry_cnt < MAX_READ_RETRY) {
@@ -785,8 +786,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
         }
         st = fs.createReadStream(c_path+"/"+obj.vblob_file_path, range);
         st.on('error', function(err) {
-          console.log(err);
-          st.destroy();
+          st = null;
           error_msg(503,'SlowDown','The object is being updated too frequently, try later',resp);
           callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
         });
@@ -809,7 +809,7 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
       if (verb==="get") {
         st = fs.createReadStream(c_path+"/"+obj.vblob_file_path);
         st.on('error', function(err) {//RETRY??
-          st.destroy();
+          st = null;
           fb.logger.error( ("file "+obj.vblob_file_version+" is purged by gc already!"));
           //error_msg(508,'SlowDown','The object is being updated too frequently, try later',resp);
           //callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
