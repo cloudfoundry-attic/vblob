@@ -15,7 +15,7 @@ var TEMP_FOLDER = "~tmp";
 var GC_FOLDER = "~gc";
 var MAX_COPY_RETRY = 3;
 var MAX_READ_RETRY = 3;
-
+var openssl_available = false; //by default do not use openssl to calculate md5
 var gc_hash = {}; //for caching gc info;
 
 function hex_val(ch)
@@ -137,6 +137,16 @@ function FS_blob(option,callback)  //fow now no encryption for fs
       start_gc(option,this1);
     } else { this1.logger.error( ('root folder in fs driver is not mounted')); }
     if (callback) { callback(this1,err); }
+    //check openssl
+    exec('echo "dummy" | openssl md5',
+        function(error,stdout, stderr) {
+          if (error || stderr || stdout !== 'f02e326f800ee26f04df7961adbf7c0a\n') {
+            this1.logger.info('no openssl for md5 calculation');
+            return;
+          }
+          this1.logger.info('use openssl for md5 calculation');
+          openssl_available = true;
+        } );
   });
 }
 
@@ -365,7 +375,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
     stream.destroy();
   });
   data.on("data",function (chunk) {
-    md5_etag.update(chunk);
+    if (file_size < 512000 || !openssl_available) md5_etag.update(chunk); else md5_etag = null;
     file_size += chunk.length;
     stream.write(chunk);
   });
@@ -375,9 +385,8 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
     stream.end();
     stream.destroySoon();
   });
-  stream.once("close", function() {
-    fb.logger.debug( ("close write stream "+filename));
-    md5_etag = md5_etag.digest('hex');
+
+  var closure1 = function(md5_etag) {
     var opts = {vblob_file_name: filename, vblob_file_path: "blob/"+prefix_path+version_id, vblob_file_etag : md5_etag, vblob_file_size : file_size, vblob_file_version : version_id, vblob_file_fingerprint : key_fingerprint};
     if (create_options['content-md5']) {
       //check if content-md5 matches
@@ -407,6 +416,28 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
     }
     //step 5 starting to re-link meta
     fb.object_create_meta(bucket_name,filename,temp_path,opts,callback,fb,!data.connection);
+  };
+  
+  stream.once("close", function() {
+    fb.logger.debug( ("close write stream "+filename));
+    if (md5_etag) {
+      md5_etag = md5_etag.digest('hex');
+      closure1(md5_etag);
+    } else
+    var child = exec('openssl md5 '+blob_path,
+          function (error, stdout, stderr) {
+      if (error) {
+          error_msg(500,"InternalError","Error in md5 calculation:"+error,resp);
+          callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+          data.destroy();
+          remove_uploaded_file(blob_path);
+          return;
+      }
+      //MD5(test1.txt)= xxxxx
+      md5_etag = stdout.substr(stdout.lastIndexOf(" ")+1);
+      md5_etag = md5_etag.replace("\n","");
+      closure1(md5_etag);
+    }); //openssl
   });
   if (data.connection) // copy stream does not have connection
   {
