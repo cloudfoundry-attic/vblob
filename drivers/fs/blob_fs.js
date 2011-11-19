@@ -164,29 +164,36 @@ FS_blob.prototype.bucket_create = function(bucket_name,callback,fb)
       return;
     }
     var c_path = fb.root_path + "/" + bucket_name;
-    if (Path.existsSync(c_path) === false)
-    {
-      fb.logger.debug("path "+c_path+" does not exist! Let's create one");
-      fs.mkdirSync(c_path,"0775");
-    } else
-    {
-      fb.logger.debug(("path "+c_path+" exists!"));
-    }
-    if (Path.existsSync(c_path+"/"+TEMP_FOLDER) === false)
-    {
-      fs.mkdirSync(c_path+"/"+TEMP_FOLDER,"0775");
-    }
-    if (Path.existsSync(c_path+"/"+GC_FOLDER) === false)
-    {
-      fs.mkdirSync(c_path+"/"+GC_FOLDER,"0775");
-    }
-    if (Path.existsSync(c_path+"/ts") === false) //double check ts
-    {
-      fb.logger.debug( ("timestamp "+c_path+"/ts does not exist. Need to create one"));
-      fs.writeFile(c_path+"/ts", "DEADBEEF");
-    } else
-    {
-      fb.logger.debug( ("timestamp "+c_path+"/ts exists!"));
+    try {
+      if (Path.existsSync(c_path) === false)
+      {
+        fb.logger.debug("path "+c_path+" does not exist! Let's create one");
+        fs.mkdirSync(c_path,"0775");
+      } else
+      {
+        fb.logger.debug(("path "+c_path+" exists!"));
+      }
+      if (Path.existsSync(c_path+"/"+TEMP_FOLDER) === false)
+      {
+        fs.mkdirSync(c_path+"/"+TEMP_FOLDER,"0775");
+      }
+      if (Path.existsSync(c_path+"/"+GC_FOLDER) === false)
+      {
+        fs.mkdirSync(c_path+"/"+GC_FOLDER,"0775");
+      }
+      if (Path.existsSync(c_path+"/ts") === false) //double check ts
+      {
+        fb.logger.debug( ("timestamp "+c_path+"/ts does not exist. Need to create one"));
+        fs.writeFile(c_path+"/ts", "DEADBEEF");
+      } else
+      {
+        fb.logger.debug( ("timestamp "+c_path+"/ts exists!"));
+      }
+    } catch (err1) {
+      var resp = {};
+      error_msg(500,"InternalError","Cannot create bucket because: "+err1,resp);
+      callback(resp.resp_code, resp.resp_header, resp.resp_body,null);
+      return;
     }
     resp_code = 200;
     var header = common_header();
@@ -345,34 +352,49 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
   var temp_path = c_path + "/" + TEMP_FOLDER +"/" + version_id;
   var blob_path = c_path + "/blob/" + prefix_path + version_id;
   var meta_json = { vblob_file_name : filename, vblob_file_path : "blob/"+prefix_path+version_id };
-  fs.writeFileSync(temp_path, JSON.stringify(meta_json));
+  try {
+    fs.writeFileSync(temp_path, JSON.stringify(meta_json));
+  } catch (err1) {
+    if (resp !== null) {
+      error_msg(500,"InternalError",err1,resp);
+      callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+    }
+    fs.unlink(temp_path,function(err) {});
+    return;
+  }
 //step 3.1 create folders is needed
-  if (!create_prefix_folders([c_path+"/blob",prefix1,prefix2],callback)) return;
-  if (!create_prefix_folders([c_path+"/versions", prefix1,prefix2],callback)) return;
-  if (!create_prefix_folders([c_path+"/meta",prefix1,prefix2],callback)) return;
+  if (!create_prefix_folders([c_path+"/blob",prefix1,prefix2],callback)) { fs.unlink(temp_path,function(err) {}); return; }
+  if (!create_prefix_folders([c_path+"/versions", prefix1,prefix2],callback)) { fs.unlink(temp_path,function(err) {}); return; }
+  if (!create_prefix_folders([c_path+"/meta",prefix1,prefix2],callback)) { fs.unlink(temp_path,function(err) {}); return; }
 //step 4 stream blob
   var stream = fs.createWriteStream(blob_path);
   var md5_etag = crypto.createHash('md5');
   var md5_base64 = null;
   var file_size = 0;
+  var upload_failed = false;
   stream.on("error", function (err) {
-    fb.logger.error( ("write stream " + filename+err));
+    upload_failed = true;
+    fb.logger.error( ("write stream " + blob_path+" "+err));
     if (resp !== null) {
       error_msg(500,"InternalError",err,resp);
       callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
     }
-    data.destroy();
+    if (data) data.destroy();
+    if (stream && !stream.destroyed) { stream.destroyed = true;  stream.destroy(); }
     stream = null;
+    fs.unlink(blob_path, function(err) {});
+    fs.unlink(temp_path, function(err) {});
     //stream.destroy();
   });
   data.on("error", function (err) {
+    upload_failed = true;
     if (resp !== null) {
       error_msg(500,"InternalError",err,resp);
       callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
     }
-    fb.logger.error( ('input stream '+filename+err));
-    data.destroy();
-    stream.destroy();
+    fb.logger.error( ('input stream '+blob_path+" "+err));
+    if (data) data.destroy();
+    if (stream && !stream.destroyed) { stream.destroyed = true; stream.destroy(); }
   });
   data.on("data",function (chunk) {
     if (file_size < 512000 || !openssl_available) md5_etag.update(chunk); else md5_etag = null;
@@ -380,7 +402,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
     stream.write(chunk);
   });
   data.on("end", function () {
-    fb.logger.debug( ('upload ends'));
+    fb.logger.debug( ('upload ends '+blob_path));
     data.upload_end = true;
     stream.end();
     stream.destroySoon();
@@ -400,6 +422,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
         fb.logger.error( (filename+' md5 not match: uploaded: '+ md5_base64 + ' specified: ' + create_options['content-md5']));
         data.destroy();
         remove_uploaded_file(blob_path);
+        fs.unlink(temp_path, function(err) {});
         return;
       }
     }
@@ -419,6 +442,15 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
   };
   
   stream.once("close", function() {
+    if (upload_failed) {
+      if (resp !== null) {
+        error_msg(500,"InternalError","upload failed",resp);
+        callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+      }
+      fs.unlink(blob_path, function(err) {});
+      fs.unlink(temp_path, function(err) {});
+      return;
+    }
     fb.logger.debug( ("close write stream "+filename));
     if (md5_etag) {
       md5_etag = md5_etag.digest('hex');
@@ -427,6 +459,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
     var child = exec('openssl md5 '+blob_path,
           function (error, stdout, stderr) {
       if (error) {
+          fb.logger.error(blob_path+' md5 calculation error: '+error);
           error_msg(500,"InternalError","Error in md5 calculation:"+error,resp);
           callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
           data.destroy();
@@ -444,6 +477,7 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
     data.connection.once('close',function() {
       fb.logger.debug( ('client disconnect'));
       if (data.upload_end === true) { return; }
+      upload_failed = true;
       fb.logger.warn( ('interrupted upload: ' + filename));
       data.destroy();
       stream.destroy();
@@ -475,6 +509,8 @@ FS_blob.prototype.object_create_meta = function (bucket_name, filename, temp_pat
         error_msg(404,"NoSuchBucket",err,resp);
         callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
       }
+      fs.unlink(temp_path,function(err) {});
+      fs.unlink(fb.root_path+"/"+bucket_name+"/"+doc.vblob_file_path,function(err){});
       return;
     }
     fb.logger.debug( ("Created meta for file "+filename+" in bucket_name "+bucket_name));
@@ -496,6 +532,8 @@ FS_blob.prototype.object_create_meta = function (bucket_name, filename, temp_pat
           error_msg(500,"InternalError",err,resp);
           callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
         }
+        fs.unlink(temp_path,function(err) {});
+        fs.unlink(fb.root_path+"/"+bucket_name+"/"+doc.vblob_file_path,function(err){});
         return;
       }
       //add to gc cache
