@@ -327,6 +327,17 @@ var bucket_list_post_proc = function(resp_body) {
   return resp_body;
 };
 
+var object_list_post_proc = function(resp_body) {
+  if (resp_body.ListBucketResult.Contents) {
+    for (var i = 0; i < resp_body.ListBucketResult.Contents.length; i++) {
+      if (resp_body.ListBucketResult.Contents[i].Owner.ID === undefined) {
+        resp_body.ListBucketResult.Contents[i].Owner = {ID : "1a2b3c4d5e6f7" , DisplayName : "blob" };
+      }
+    }
+  }
+  return resp_body;
+};
+
 app.get('/',authenticate);
 app.get('/',function(req,res) {
   if (req.method === 'HEAD') { //not allowed
@@ -350,7 +361,7 @@ app.get('/:bucket[/]{0,1}$',function(req,res) {
   if (req.query["max-keys"]) { opt["max-keys"] = req.query["max-keys"]; }
   //if (req.query.location !== undefined) { opt.location = req.query.location; }
   //if (req.query.logging !== undefined) { opt.logging = req.query.logging; }
-  current_driver.object_list(req.params.bucket,opt,general_resp(res,null,req.method.toLowerCase()));
+  current_driver.object_list(req.params.bucket,opt,general_resp(res,object_list_post_proc,req.method.toLowerCase()));
 });
 
 var get_hdrs = [ 'if-modified-since','if-unmodified-since', 'if-match', 'if-none-match'];

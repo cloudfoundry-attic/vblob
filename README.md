@@ -71,12 +71,16 @@ The gateway and its drivers can be configured via config.json which is read at s
                 "option": {
                     "root": "<pathname for storing blobs>",
                     "node_exepath": "<optional: path to node executable>",
+                    "compactor" : <true to enable enumeration compactor, don't enable multiple compactor instances!>,
                     "gc_exepath": "<optional: path to gc js file, e.g. /<vblob>/blob_fs/fs_gc.js >",
                     "gc_interval": "<optional: ms per gc execution, e.g. 600000 (10 mins) >",
                     "gcfc_exepath": "<optional: path to lightweight gc js file, e.g. /<vblob>/blob_fs/fs_gcfc.js >",
-                    "gcfc_interval": "<optional: ms per lightweiht gc execution, e.g. 3000 (3 secs) >",
+                    "gcfc_interval": "<optional: ms per lightweiht gc execution, e.g. 1500 (1.5 secs) >",
                     "gctmp_exepath": "<optional: path to tmp folder gc js file, e.g. /<vblob>/blob_fs/fs_gctmp.js >",
-                    "gctmp_interval": "<optional: ms per tmp folder gc execution, e.g. 1 hr >"
+                    "gctmp_interval": "<optional: ms per tmp folder gc execution, e.g. 1 hr >",
+                    "ec_exepath": "<path to ec js file, e.g. /<vblob>/blob_fs/fs_ec.js >",
+                    "ec_interval": "<ms per ec execution, e.g. 1500 (1.5 secs) >",
+                    "quota": <maximum number of bytes allowed to store, default is unlimited>
                 }
             }
         },

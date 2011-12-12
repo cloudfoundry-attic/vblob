@@ -18,14 +18,25 @@ buck.on('gc',function(buck_idx) {
   try {
     var trashes = Object.keys(gc_hash[buckets[buck_idx]]); //second level key: file fingerprint
     var trash_dir = root_path + "/" + buckets[buck_idx] + "/~gc";
+    var enum_dir = root_path + "/" + buckets[buck_idx] + "/~enum";
+    fs.mkdir(enum_dir,"0775", function(err) {} );
+    var enum_delta = {};
+
+    for (var j = 0; j < trashes.length; j++)
+      enum_delta[gc_hash[buckets[buck_idx]][trashes[j]].fn] = 1;
+    //WRITE ENUM DELTA
+    var enum_delta_file = enum_dir + "/delta-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
+    fs.writeFileSync(enum_delta_file, JSON.stringify(enum_delta));
+    enum_delta = null;
+
     var evt = new events.EventEmitter();
     evt.Bucket = buckets[i];
     evt.Batch = BATCH_NUM; evt.Counter = 0;
     evt.on('next',function(idx) {
       var filename = trashes[idx]; //hash-pref-suff-ts-rand1-rand
       //console.log(filename);
-      for (var xx = 0; xx < gc_hash[buckets[buck_idx]][filename].length; xx++)
-        fs.unlink(trash_dir+"/"+gc_hash[buckets[buck_idx]][filename][xx], function(err) {} );
+      for (var xx = 0; xx < gc_hash[buckets[buck_idx]][filename].ver.length; xx++)
+        fs.unlink(trash_dir+"/"+gc_hash[buckets[buck_idx]][filename].ver[xx], function(err) {} );
       var prefix1 = filename.substr(0,PREFIX_LENGTH), prefix2 = filename.substr(PREFIX_LENGTH,PREFIX_LENGTH);
       var fdir_path = root_path + "/" + evt.Bucket + "/versions/" + prefix1 + "/" + prefix2;
       var temp_file = "/tmp/"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
@@ -45,6 +56,8 @@ buck.on('gc',function(buck_idx) {
                     if (!err2) {
                       var obj = JSON.parse(data);
                       fs.unlink(root_path+"/"+evt.Bucket+"/"+obj.vblob_file_path,function() {} );
+                    } else {
+                      //??
                     }
                     fs.unlink(file1,function() {} );
                     if (evt2.counter > 0) evt2.emit('next',idx2+1); else
@@ -73,6 +86,14 @@ buck.on('gc',function(buck_idx) {
     evt.on('nextbatch',function() {
       console.log('counter ' + evt.Counter);
       if (evt.Counter + BATCH_NUM > trashes.length) evt.Batch = trashes.length - evt.Counter;
+      /*
+      if (evt.Counter >= trashes.length) {
+        //WRITE ENUM DELTA
+        var enum_delta_file = enum_dir + "/delta-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
+        fs.writeFile(enum_delta_file, JSON.stringify(enum_delta),function(err) {} );
+        enum_delta = null;
+      }
+      */
       for (var i = evt.Counter; i < trashes.length && i < evt.Counter + BATCH_NUM; i++) {
         evt.emit('next', i);
       }

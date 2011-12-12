@@ -13,10 +13,13 @@ var MAX_LIST_LENGTH = 1000; //max number of objects to list
 var base64_char_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 var TEMP_FOLDER = "~tmp";
 var GC_FOLDER = "~gc";
+var ENUM_FOLDER = "~enum";
 var MAX_COPY_RETRY = 3;
 var MAX_READ_RETRY = 3;
 var openssl_available = false; //by default do not use openssl to calculate md5
 var gc_hash = {}; //for caching gc info;
+var enum_cache = {};
+var enum_expire = {};
 
 function hex_val(ch)
 {
@@ -76,6 +79,23 @@ function error_msg(statusCode,code,msg,resp)
   //no additional info for now
 }
 
+function start_compactor(option,fb)
+{
+  var node_exepath = option.node_exepath ? option.node_exepath : "node";
+  var ec_exepath = option.ec_exepath ? option.ec_exepath : "drivers/fs/fs_ec.js";
+  var ec_interval = option.ec_interval ? option.ec_interval : "1500";
+  var ec_status = 0;
+  fb.ecid = setInterval(function() {
+    if (ec_status === 1) return; //already a gc process running
+    ec_status = 1;
+    exec(node_exepath + " " + ec_exepath + " " + option.root + " > /dev/null",
+        function(error,stdout, stderr) {
+          ec_status = 0; //finished set to 0
+        } );
+    }, parseInt(ec_interval,10));
+  
+}
+
 function start_gc(option,fb)
 {
   gc_hash = null; gc_hash = {};
@@ -84,7 +104,7 @@ function start_gc(option,fb)
   var gc_exepath = option.gc_exepath ? option.gc_exepath : "drivers/fs/fs_gc.js";
   var gcfc_exepath = option.gcfc_exepath ? option.gcfc_exepath : "drivers/fs/fs_gcfc.js";
   var gc_interval = option.gc_interval ? option.gc_interval : "600000";
-  var gcfc_interval = option.gcfc_interval ? option.gcfc_interval : "3000";
+  var gcfc_interval = option.gcfc_interval ? option.gcfc_interval : "1500";
   var gctmp_exepath = option.gctmp_exepath ? option.gctmp_exepath : "drivers/fs/fs_gctmp.js";
   var gctmp_interval = option.gctmp_interval ? option.gctmp_interval : "3600000";
   fb.gcid = setInterval(function() {
@@ -127,14 +147,50 @@ function start_gc(option,fb)
     }, parseInt(gctmp_interval,10));
 }
 
+function start_quota_gathering(fb)
+{
+  fs.readdir(fb.root_path, function(err, dirs) {
+    if (err) { 
+      setTimeout(start_quota_gathering, 1000, fb);
+      return;
+    }
+    var evt = new events.EventEmitter();
+    var counter = dirs.length;
+    var sum = 0;
+    var used_quota = new Array(dirs.length);
+    evt.on("Get Usage",function (dir_name, idx) {
+      fs.readFile(fb.root_path+"/"+dir_name+"/~enum/quota", function(err,data) {
+          if (err) used_quota[idx] = null; else
+          used_quota[idx] = parseInt(data,10);
+          counter--; if (counter === 0) { evt.emit("Start Aggregate"); }
+      });
+    });
+    evt.on("Start Aggregate", function () {
+      for (var i = 0; i < dirs.length; i++) {
+        if (used_quota[i] === null)  { continue; }
+        sum += used_quota[i];
+      }
+      fb.used_quota = sum;
+      //console.log('usage: ' + sum);
+      setTimeout(start_quota_gathering,1000,fb);
+    });
+    if (dirs.length === 0) { evt.emit("Start Aggregate"); }
+    for (var i = 0; i < dirs.length; i++)
+    { evt.emit("Get Usage",dirs[i],i); }
+  });
+}
+
 function FS_blob(option,callback)  //fow now no encryption for fs
 {
   var this1 = this;
   this.root_path = option.root; //check if path exists here
   this.logger = option.logger;
+  if (option.quota) { this.quota = parseInt(option.quota,10); this.used_quota = 0; }
   fs.stat(this1.root_path, function(err,stats) {
     if (!err) {
       start_gc(option,this1);
+      if (option.compactor === true) start_compactor(option,this1);
+      if (option.quota) setTimeout(start_quota_gathering, 1000, this1);
     } else { this1.logger.error( ('root folder in fs driver is not mounted')); }
     if (callback) { callback(this1,err); }
     //check openssl
@@ -181,6 +237,11 @@ FS_blob.prototype.bucket_create = function(bucket_name,callback,fb)
       {
         fs.mkdirSync(c_path+"/"+GC_FOLDER,"0775");
       }
+      if (Path.existsSync(c_path+"/"+ENUM_FOLDER) === false)
+      {
+        fs.mkdirSync(c_path+"/"+ENUM_FOLDER,"0775");
+      }
+      fs.writeFile(c_path+"/"+ENUM_FOLDER+"/base", "{}");
       if (Path.existsSync(c_path+"/ts") === false) //double check ts
       {
         fb.logger.debug( ("timestamp "+c_path+"/ts does not exist. Need to create one"));
@@ -339,9 +400,14 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
 {
   var resp = {};
 //step 1 check bucket existence
-  if (resp === undefined) { resp = null; }
   var c_path = this.root_path + "/" + bucket_name;
   if (bucket_exists(bucket_name,callback,fb) === false) return;
+  //QUOTA
+  if (this.quota && this.used_quota + parseInt(create_meta_data["content-length"],10) > this.quota) {
+    error_msg(500,"UsageExceeded","Usage will exceed the quota",resp);
+    callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+    return;
+  }
 //step2.1 calc unique hash for key
   var key_fingerprint = get_key_fingerprint(filename);
 //step2.2 gen unique version id
@@ -538,7 +604,7 @@ FS_blob.prototype.object_create_meta = function (bucket_name, filename, temp_pat
       }
       //add to gc cache
       if (!gc_hash[bucket_name]) gc_hash[bucket_name] = {};
-      if (!gc_hash[bucket_name][doc.vblob_file_fingerprint]) gc_hash[bucket_name][doc.vblob_file_fingerprint] = [doc.vblob_file_version]; else gc_hash[bucket_name][doc.vblob_file_fingerprint].push(doc.vblob_file_version);
+      if (!gc_hash[bucket_name][doc.vblob_file_fingerprint]) gc_hash[bucket_name][doc.vblob_file_fingerprint] = {ver:[doc.vblob_file_version], fn:doc.vblob_file_name}; else gc_hash[bucket_name][doc.vblob_file_fingerprint].ver.push(doc.vblob_file_version);
     //step 6 mv to versions
       var prefix1 = doc.vblob_file_version.substr(0,PREFIX_LENGTH), prefix2 = doc.vblob_file_version.substr(PREFIX_LENGTH,PREFIX_LENGTH);
       fs.rename(temp_path, fb.root_path + "/"+bucket_name+"/versions/" + prefix1 + "/" + prefix2 + "/" + doc.vblob_file_version,function (err) {
@@ -584,7 +650,7 @@ FS_blob.prototype.object_delete_meta = function (bucket_name, filename, callback
     }
     //add to gc cache
     if (!gc_hash[bucket_name]) gc_hash[bucket_name] = {};
-    if (!gc_hash[bucket_name][key_fingerprint]) gc_hash[bucket_name][key_fingerprint] = [version_id]; else gc_hash[bucket_name][key_fingerprint].push(version_id);
+    if (!gc_hash[bucket_name][key_fingerprint]) gc_hash[bucket_name][key_fingerprint] = {ver:[version_id],fn:filename}; else gc_hash[bucket_name][key_fingerprint].ver.push(version_id);
 
     fs.unlink(file_path, function(err) {
       //ERROR?
@@ -660,6 +726,14 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
       return;
     }
     var obj = JSON.parse(data);
+    //QUOTA
+    if (source_bucket !== bucket_name || source_file !== filename) {
+      if (fb.quota && fb.used_quota + obj.vblob_file_size > fb.quota) {
+        error_msg(500,"UsageExceeded","Usage will exceed quota",resp);
+        callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+        return;
+      }
+    }
     if (true) {
       //check etag, last modified
       var check_modified = true;
@@ -892,6 +966,108 @@ FS_blob.prototype.object_read = function (bucket_name, filename, options, callba
   });
 };
 
+function query_objects(bucket_name, options, callback, fb)
+{
+  var keys = null;
+  keys = enum_cache[bucket_name].keys;
+  if (!keys) {
+    fb.logger.debug("sorting the object keys in bucket " + bucket_name);  
+    keys = Object.keys(enum_cache[bucket_name].tbl);
+    keys = keys.sort();
+    enum_cache[bucket_name].keys = keys;
+  }
+  var idx = 0;
+  var low = 0, high = keys.length-1, mid;
+  if (options.marker || options.prefix) {
+    var st = options.marker;
+    if (!st || st < options.prefix) st = options.prefix;
+    while (low <= high) {
+      mid = ((low + high) >> 1);
+      if (keys[mid] === st) { low = mid; break; } else
+      if (keys[mid] < st) low = mid + 1;
+      else high = mid-1;
+    }
+    idx = low;
+  }
+  var idx2 = keys.length;
+  if (options.prefix) { //end of prefix range
+    var st2 = options.prefix;
+    st2 = st2.substr(0,st2.length-1)+String.fromCharCode(st2.charCodeAt(st2.length-1)+1);
+    low = idx; high = keys.length-1;
+    while (low <= high) {
+      mid = ((low + high) >> 1);
+      if (keys[mid] === st2) { low = mid; break; } else
+      if (keys[mid] < st2) low = mid + 1;
+      else high = mid-1;
+    }
+    idx2 = low;
+  }
+  var limit1 = options["max-keys"] ? parseInt(options["max-keys"],10) : 1000;
+  var limit = limit1;
+  if (limit > 1000) limit = 1000;
+  var res_json = {};
+  var res_contents = [];
+  var res_common_prefixes = [];
+  res_json["Name"] = bucket_name;
+  res_json["Prefix"] = options.prefix ? options.prefix : {};
+  res_json["Marker"] = options.marker ? options.marker : {};
+  res_json["MaxKeys"] = ""+limit;
+  if (options.delimiter) { 
+    res_json["Delimiter"] = options.delimiter;
+  }
+  var last_pref = null;
+  for (var i = 0; i < limit && idx < idx2; ) {
+    var key = keys[idx];
+    idx++;
+    if (options.delimiter) {
+      var start = 0;
+      if (options.prefix) start = options.prefix.length;
+      var pos = key.indexOf(options.delimiter,start);
+      if (pos >= 0) { //grouping together [prefix] .. delimiter
+        var pref = key.substring(0, pos+1);
+        if (pref === last_pref) continue;
+        last_pref = pref;
+        res_common_prefixes.push({"Prefix":pref});
+        i++; continue;
+      }
+    }
+    i++;
+    var doc = enum_cache[bucket_name].tbl[key];
+    res_contents.push({"Key":key, "LastModified":doc.lastmodified, "ETag":'"'+doc.etag+'"', "Size":doc.size, "Owner":{}, "StorageClass":"STANDARD"});
+  }
+  if (i >= limit && idx < idx2 && limit < limit1) res_json["IsTruncated"] = 'true';
+  else res_json["IsTruncated"] = 'false';
+  if (res_contents.length > 0) res_json["Contents"] =  res_contents; //files 
+  if (res_common_prefixes.length > 0) res_json["CommonPrefixes"] = res_common_prefixes; //folders
+  var resp = {};
+  resp.resp_code = 200; resp.resp_header = common_header(); resp.resp_body = {"ListBucketResult":res_json};
+  res_json = null; res_contents = null; keys = null; res_common_prefixes = null;
+  callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+}
+
+FS_blob.prototype.object_list = function(bucket_name, options, callback, fb)
+{
+  if (options.delimiter && options.delimiter.length > 1) {
+    var resp = {};
+    error_msg(400,"InvalidArgument","Delimiter should be a single character",resp);
+    callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+    return;
+  }
+  var now = new Date().valueOf();
+  if (!enum_cache[bucket_name] || !enum_expire[bucket_name] || enum_expire[bucket_name] < now) {
+    enum_cache[bucket_name] = null;
+    try {
+      enum_cache[bucket_name] = {tbl:JSON.parse(fs.readFileSync(fb.root_path+"/"+bucket_name+"/"+ENUM_FOLDER+"/base"))};
+      enum_expire[bucket_name] = now + 1000 * 5;
+      query_objects(bucket_name, options,callback,fb);
+    } catch (e) {
+      var resp = {};
+      error_msg(500,'InternalError',e,resp);
+      callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+    }
+  } else query_objects(bucket_name, options,callback,fb); 
+}
+
 FS_blob.prototype.bucket_list = function()
 {
   return  fs.readdirSync(this.root_path);
@@ -955,9 +1131,8 @@ FS_Driver.prototype.bucket_list = function (callback) {
 };
 
 FS_Driver.prototype.object_list = function(bucket_name,option,callback) {
-  var resp = {};
-  error_msg(501,"NotImplemented","Listing bucket is not implemented in this version",resp);
-  callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
+  if (check_client(this.client,callback) === false) return;
+  this.client.object_list(bucket_name,option, callback, this.client);
 };
 
 FS_Driver.prototype.object_read = function(bucket_name,object_key,options,callback){

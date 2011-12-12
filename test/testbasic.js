@@ -105,7 +105,7 @@ suite.addBatch({
     'should respond with either a list with only one object or an error': function (err,res) {
       assert.isNotNull(res.resp_body);
       if (res.statusCode === 200) {
-        assert.isObject(res.resp_body.ListBucketResult.Contents);
+        assert.isObject(res.resp_body.ListBucketResult);
       } else {
         assert.isNotNull(res.resp_body.Error);
       }
