@@ -44,7 +44,8 @@ buck.on('compact',function(buck_idx) {
     var _used_quota = 0;
     try {
       enum_base = JSON.parse(fs.readFileSync(enum_dir+"/base"));
-      _used_quota = parseInt(fs.readFileSync(enum_dir+"/quota"),10);
+      var obj_q = JSON.parse(fs.readFileSync(enum_dir+"/quota"));
+      _used_quota = parseInt(obj_q.storage,10);
     } catch (e) {
     }
     var temp_file = "/tmp/"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
@@ -95,7 +96,8 @@ buck.on('compact',function(buck_idx) {
                 try {
                   fs.unlinkSync(enum_dir+"/quota");
                 } catch (e) {}
-                fs.writeFileSync(enum_dir+"/quota",_used_quota+"");
+                var obj_cnt = Object.keys(enum_base).length;
+                fs.writeFileSync(enum_dir+"/quota","{\"storage\":"+_used_quota+",\"count\":"+obj_cnt+"}");
                 fs.unlink(file1,function() {} );
                 if (evt2.counter > 0) evt2.emit('next',idx2+1); 
               });

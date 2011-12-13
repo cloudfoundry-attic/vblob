@@ -80,7 +80,8 @@ The gateway and its drivers can be configured via config.json which is read at s
                     "gctmp_interval": "<optional: ms per tmp folder gc execution, e.g. 1 hr >",
                     "ec_exepath": "<path to ec js file, e.g. /<vblob>/blob_fs/fs_ec.js >",
                     "ec_interval": "<ms per ec execution, e.g. 1500 (1.5 secs) >",
-                    "quota": <maximum number of bytes allowed to store, default is unlimited>
+                    "quota": <maximum number of bytes allowed to store, default is unlimited>,
+                    "obj_limit" : <maximum number of objects allowed to store, default is unlimited>
                 }
             }
         },

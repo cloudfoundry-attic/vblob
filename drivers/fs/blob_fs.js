@@ -156,22 +156,23 @@ function start_quota_gathering(fb)
     }
     var evt = new events.EventEmitter();
     var counter = dirs.length;
-    var sum = 0;
+    var sum = 0, sum2 = 0;
     var used_quota = new Array(dirs.length);
+    var obj_count = new Array(dirs.length);
     evt.on("Get Usage",function (dir_name, idx) {
       fs.readFile(fb.root_path+"/"+dir_name+"/~enum/quota", function(err,data) {
-          if (err) used_quota[idx] = null; else
-          used_quota[idx] = parseInt(data,10);
+          if (err) { obj_count[idx] = null; used_quota[idx] = null; } else
+          { var obj = JSON.parse(data); obj_count[idx] = parseInt(obj.count,10); used_quota[idx] = parseInt(obj.storage,10); }
           counter--; if (counter === 0) { evt.emit("Start Aggregate"); }
       });
     });
     evt.on("Start Aggregate", function () {
       for (var i = 0; i < dirs.length; i++) {
         if (used_quota[i] === null)  { continue; }
-        sum += used_quota[i];
+        sum += used_quota[i]; sum2 += obj_count[i];
       }
-      fb.used_quota = sum;
-      //console.log('usage: ' + sum);
+      fb.used_quota = sum; fb.obj_count = sum2;
+      //console.log('usage: ' + sum +' count: '+sum2);
       setTimeout(start_quota_gathering,1000,fb);
     });
     if (dirs.length === 0) { evt.emit("Start Aggregate"); }
@@ -186,11 +187,12 @@ function FS_blob(option,callback)  //fow now no encryption for fs
   this.root_path = option.root; //check if path exists here
   this.logger = option.logger;
   if (option.quota) { this.quota = parseInt(option.quota,10); this.used_quota = 0; }
+  if (option.obj_limit) { this.obj_limit = parseInt(option.obj_limit, 10); this.obj_count = 0; }
   fs.stat(this1.root_path, function(err,stats) {
     if (!err) {
       start_gc(option,this1);
       if (option.compactor === true) start_compactor(option,this1);
-      if (option.quota) setTimeout(start_quota_gathering, 1000, this1);
+      if (option.obj_limit || option.quota) setTimeout(start_quota_gathering, 1000, this1);
     } else { this1.logger.error( ('root folder in fs driver is not mounted')); }
     if (callback) { callback(this1,err); }
     //check openssl
@@ -403,7 +405,8 @@ FS_blob.prototype.object_create = function (bucket_name,filename,create_options,
   var c_path = this.root_path + "/" + bucket_name;
   if (bucket_exists(bucket_name,callback,fb) === false) return;
   //QUOTA
-  if (this.quota && this.used_quota + parseInt(create_meta_data["content-length"],10) > this.quota) {
+  if (this.quota && this.used_quota + parseInt(create_meta_data["content-length"],10) > this.quota ||
+      this.obj_limit && this.obj_count >= this.obj_limit) {
     error_msg(500,"UsageExceeded","Usage will exceed the quota",resp);
     callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
     return;
@@ -728,7 +731,8 @@ FS_blob.prototype.object_copy = function (bucket_name,filename,source_bucket,sou
     var obj = JSON.parse(data);
     //QUOTA
     if (source_bucket !== bucket_name || source_file !== filename) {
-      if (fb.quota && fb.used_quota + obj.vblob_file_size > fb.quota) {
+      if (fb.quota && fb.used_quota + obj.vblob_file_size > fb.quota || 
+          fb.obj_limit && fb.obj_count >= fb.obj_limit) {
         error_msg(500,"UsageExceeded","Usage will exceed quota",resp);
         callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
         return;
