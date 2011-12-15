@@ -7,7 +7,7 @@ var utils = require('./s3/utils');
 var auth = require('./s3/auth');
 var join = require('path').join;
 
-module.exports.validate = function(keyID, secretID, method, targets, headers, signature){
+var validate = function(keyID, secretID, method, targets, headers, signature){
   var content_md5 = "";
   var content_type = "";
   var cnt = 1;
@@ -38,3 +38,16 @@ module.exports.validate = function(keyID, secretID, method, targets, headers, si
   });
   return Authorization === signature;
 };
+
+module.exports.authenticate = function(creds, method, targets, headers, signature, resp){
+  var key = null;
+  if (signature) {
+    key = signature.substring(4,signature.indexOf(':'));
+  }
+  if (!key || !creds[key] || validate(key, creds[key], method, targets, headers, signature) === false) {
+    resp.resp_code = 401; resp.resp_header = {}; resp.resp_body = {Error:{Code:"Unauthorized",Message:"Signature does not match"}}; 
+    return false;
+  }
+  return true;
+};
+

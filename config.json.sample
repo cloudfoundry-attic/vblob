@@ -36,9 +36,8 @@
     "logfile": "<pathname for the log>",
     "keyID": "<any id for auth>",
     "secretID": "<any secret for auth>",
-    "auth": "enabled",
+    "auth": "<basic, digest or s3;  other values mean disabled>",
     "debug": true,
     "account_file" : "./account.json",
     "account_api" : true
 }
-

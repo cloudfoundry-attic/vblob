@@ -4,7 +4,6 @@ Copyright (c) 2011 VMware, Inc.
 var Logger = require('./common/logger').Logger; //logging module
 var valid_name = require('./common/bucket_name_check').is_valid_name; //bucket name check
 var express = require("express"); //express web framework
-var s3auth = require('./common/s3-auth'); //front end authentication (s3 style)
 var j2x = require('./common/json2xml'); //json to xml transformation
 var util = require('util');
 var fs = require('fs');
@@ -35,6 +34,17 @@ try
 if (config.keyID && config.secretID) { credential_hash[config.keyID] = config.secretID; }
 
 var logger = new Logger(config.logtype, config.logfile);
+
+var auth_module = null;
+if (config.auth) {
+  try {
+    auth_module = require('./common/'+config.auth+'-auth'); //front end authentication
+  } catch (err) 
+  {
+    logger.warn("Loading authentication module error: " + err);
+    logger.warn("Disable authentication...");
+  }
+}
 
 var app = express.createServer( );
 var server_ready = new events.EventEmitter();
@@ -130,16 +140,11 @@ var authenticate = function(req,res,next) {
   if (req.params && req.params.bucket) { targets.bucket = req.params.bucket; }
   if (req.params && req.params[0]) { targets.filename = req.params[0]; }
   targets.query = req.query;
-  var res_body;
-  if (config.auth === 'enabled') {
+  if (auth_module) {
     //only do authentication if enabled
-    var key = null;
-    if (Authorization) {
-      //extract key
-      key = Authorization.substring(4, Authorization.indexOf(':'));
-    }
-    if (!key || !credential_hash[key] || s3auth.validate(key, credential_hash[key], req.method.toUpperCase(), targets, req.headers, Authorization) === false ) {
-      general_resp(res,null,req.method.toLowerCase())(401,{},{Error:{Code:"Unauthorized",Message:"Signature does not match"}}, null);
+    var resp = {};
+    if (auth_module.authenticate(credential_hash, req.method.toUpperCase(), targets, req.headers, Authorization, resp) === false) {
+      general_resp(res, null, req.method.toLowerCase())(resp.resp_code, resp.resp_header, resp.resp_body, null);
       return;
     }
   }

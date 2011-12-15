@@ -101,7 +101,7 @@ The gateway and its drivers can be configured via config.json which is read at s
         "logfile": "<pathname for the log>",
         "keyID": "<any id for auth>",
         "secretID": "<any secret for auth>",
-        "auth": "enabled",
+        "auth": "<basic, digest or s3; other values mean disabled>",
         "debug": true
     }
 
@@ -109,7 +109,7 @@ The gateway and its drivers can be configured via config.json which is read at s
 
 `logfile` specifies the path to the log file. The `logtype` has to be [winston](https://github.com/indexzero/winston).
 
-`keyID` and `secretID` and `auth` are used to control front-end authentication. If either the key or id is not present or if auth is not set to "enabled" then authentication is disabled. 
+`keyID` and `secretID` and `auth` are used to control front-end authentication. If either the key or id is not present or if auth is not set to a proper auth type then authentication is disabled. Currently the following types are supported: "basic", "digest", and "s3". "basic" and "digest" implementation follows rfc2617.
 
 `debug` is used to log request and response headers to the console for debugging purposes. Its value is treated as boolean.
 
