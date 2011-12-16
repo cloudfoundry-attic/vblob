@@ -1,7 +1,7 @@
 /*
 Copyright (c) 2011 VMware, Inc.
 
-  test validity of bucket names
+  test validity of container names
 */
 var util = require('util');
 var vows = require('vows');
@@ -10,15 +10,15 @@ var fs = require('fs');
 
 var config = JSON.parse(fs.readFileSync('../config.json')); //must be the config you actually use for the vblob  instance
 var test_date = new Date().valueOf();
-var bucket_name = '/sonic-test'+test_date;
-var suite = vows.describe('testbucketname: using bucket prefix'+bucket_name+' against driver '+config['current_driver']+' on localhost:'+config.port);
+var container_name = '/sonic-test'+test_date;
+var suite = vows.describe('testcontainername: using container prefix'+container_name+' against driver '+config['current_driver']+' on localhost:'+config.port);
 var parse_xml = require('./utils').parse_xml;
 var assertStatus = require('./utils').assertStatus;
 var api = require('./utils').api;
 
 suite.addBatch({
   'no capital letters ' : {
-    topic: api.put(bucket_name+'-CAPITAL'),
+    topic: api.put(container_name+'-CAPITAL'),
     'should respond with a 400 ':  assertStatus(400),
     'should respond with error message': function (err,res) {
       assert.isNotNull(res.resp_body.Error);
@@ -26,14 +26,14 @@ suite.addBatch({
   }
 }).addBatch({
   'starting with lower case letters or numbers case 1' : {
-    topic: api.put('/('+bucket_name),
+    topic: api.put('/('+container_name),
     'should respond with a 400 ':  assertStatus(400),
     'should respond with error message': function (err,res) {
       assert.isNotNull(res.resp_body.Error);
     } 
   },
   'starting with lower case letters or numbers case 2' : {
-    topic: api.put('/A'+bucket_name),
+    topic: api.put('/A'+container_name),
     'should respond with a 400 ':  assertStatus(400),
     'should respond with error message': function (err,res) {
       assert.isNotNull(res.resp_body.Error);
@@ -57,7 +57,7 @@ suite.addBatch({
   }
 }).addBatch({
   'no _ ' : {
-    topic: api.put(bucket_name+'_'),
+    topic: api.put(container_name+'_'),
     'should respond with a 400 ':  assertStatus(400),
     'should respond with error message': function (err,res) {
       assert.isNotNull(res.resp_body.Error);
@@ -65,7 +65,7 @@ suite.addBatch({
   }
 }).addBatch({
   'no ..' : {
-    topic: api.put(bucket_name+'..'),
+    topic: api.put(container_name+'..'),
     'should respond with a 400 ':  assertStatus(400),
     'should respond with error message': function (err,res) {
       assert.isNotNull(res.resp_body.Error);
@@ -73,7 +73,7 @@ suite.addBatch({
   }
 }).addBatch({
   'no -. ' : {
-    topic: api.put(bucket_name+'-.'),
+    topic: api.put(container_name+'-.'),
     'should respond with a 400 ':  assertStatus(400),
     'should respond with error message': function (err,res) {
       assert.isNotNull(res.resp_body.Error);
@@ -81,7 +81,7 @@ suite.addBatch({
   }
 }).addBatch({
   'no .- ' : {
-    topic: api.put(bucket_name+'.-'),
+    topic: api.put(container_name+'.-'),
     'should respond with a 400 ':  assertStatus(400),
     'should respond with error message': function (err,res) {
       assert.isNotNull(res.resp_body.Error);
@@ -97,7 +97,7 @@ suite.addBatch({
   }
 }).addBatch({
   'no tailing -' : {
-    topic: api.put(bucket_name+'-'),
+    topic: api.put(container_name+'-'),
     'should respond with a 400 OK':  assertStatus(400),
     'should respond with error message': function (err,res) {
       assert.isNotNull(res.resp_body.Error);

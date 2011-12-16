@@ -34,12 +34,12 @@ function get_key_fingerprint(filename)
 var argv = process.argv;
 var root_path = argv[2];
 var buck = new events.EventEmitter();
-var buckets = fs.readdirSync(root_path);
-console.log(buckets);
+var containers = fs.readdirSync(root_path);
+console.log(containers);
 buck.on('compact',function(buck_idx) {
   try {
-    var enum_dir = root_path + "/" + buckets[buck_idx] + "/~enum";
-    var meta_dir = root_path + "/" + buckets[buck_idx] + "/meta";
+    var enum_dir = root_path + "/" + containers[buck_idx] + "/~enum";
+    var meta_dir = root_path + "/" + containers[buck_idx] + "/meta";
     var enum_base = {};
     var _used_quota = 0;
     try {
@@ -113,5 +113,5 @@ buck.on('compact',function(buck_idx) {
     console.log(err);
   }
 });//end of on compact event
-for (var i = 0; i < buckets.length; i++)
+for (var i = 0; i < containers.length; i++)
   buck.emit('compact',i);

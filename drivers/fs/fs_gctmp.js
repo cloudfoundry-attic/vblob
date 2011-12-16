@@ -13,22 +13,22 @@ var BATCH_NUM = 1;
 var root_path = argv[2];
 var PREFIX_LENGTH = 2;
 var MAX_TIMEOUT = 6 * 3600 * 1000; //6 hrs
-var buckets = fs.readdirSync(root_path);
-console.log(buckets);
+var containers = fs.readdirSync(root_path);
+console.log(containers);
 var buck = new events.EventEmitter();
 var current_ts = new Date().valueOf();
 buck.on('gc',function(buck_idx) {
   try {
-    var trashes = fs.readdirSync(root_path + "/" + buckets[buck_idx] + "/~tmp");
-    var trash_dir = root_path + "/" + buckets[buck_idx] + "/~tmp";
+    var trashes = fs.readdirSync(root_path + "/" + containers[buck_idx] + "/~tmp");
+    var trash_dir = root_path + "/" + containers[buck_idx] + "/~tmp";
     var evt = new events.EventEmitter();
-    evt.Bucket = buckets[i];
+    evt.Container = containers[i];
     evt.Batch = BATCH_NUM; evt.Counter = 0;
     evt.on('next',function(idx) {
       var filename = trashes[idx]; //hash-pref-suff-ts-rand1-rand
       //console.log(filename);
       var prefix1 = filename.substr(0,PREFIX_LENGTH), prefix2 = filename.substr(PREFIX_LENGTH,PREFIX_LENGTH);
-      var fdir_path = root_path + "/" + evt.Bucket + "/blob/" + prefix1 + "/" + prefix2;
+      var fdir_path = root_path + "/" + evt.Container + "/blob/" + prefix1 + "/" + prefix2;
       fs.stat(trash_dir+"/"+filename, function(err,stats) {
         if (err) {
           evt.Counter++; evt.Batch--
@@ -66,5 +66,5 @@ buck.on('gc',function(buck_idx) {
     console.log(err);
   }
 });
-for (var i = 0; i < buckets.length; i++)
+for (var i = 0; i < containers.length; i++)
   buck.emit('gc',i);

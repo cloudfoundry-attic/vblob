@@ -11,34 +11,34 @@ var BATCH_NUM = 1;
 var root_path = argv[3];
 var PREFIX_LENGTH = 2;
 var gc_hash = JSON.parse(fs.readFileSync(argv[2]));
-console.log(buckets);
+console.log(containers);
 var buck = new events.EventEmitter();
-var buckets = Object.keys(gc_hash); //first level key: bucket_name
+var containers = Object.keys(gc_hash); //first level key: container_name
 buck.on('gc',function(buck_idx) {
   try {
-    var trashes = Object.keys(gc_hash[buckets[buck_idx]]); //second level key: file fingerprint
-    var trash_dir = root_path + "/" + buckets[buck_idx] + "/~gc";
-    var enum_dir = root_path + "/" + buckets[buck_idx] + "/~enum";
+    var trashes = Object.keys(gc_hash[containers[buck_idx]]); //second level key: file fingerprint
+    var trash_dir = root_path + "/" + containers[buck_idx] + "/~gc";
+    var enum_dir = root_path + "/" + containers[buck_idx] + "/~enum";
     fs.mkdir(enum_dir,"0775", function(err) {} );
     var enum_delta = {};
 
     for (var j = 0; j < trashes.length; j++)
-      enum_delta[gc_hash[buckets[buck_idx]][trashes[j]].fn] = 1;
+      enum_delta[gc_hash[containers[buck_idx]][trashes[j]].fn] = 1;
     //WRITE ENUM DELTA
     var enum_delta_file = enum_dir + "/delta-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
     fs.writeFileSync(enum_delta_file, JSON.stringify(enum_delta));
     enum_delta = null;
 
     var evt = new events.EventEmitter();
-    evt.Bucket = buckets[i];
+    evt.Container = containers[i];
     evt.Batch = BATCH_NUM; evt.Counter = 0;
     evt.on('next',function(idx) {
       var filename = trashes[idx]; //hash-pref-suff-ts-rand1-rand
       //console.log(filename);
-      for (var xx = 0; xx < gc_hash[buckets[buck_idx]][filename].ver.length; xx++)
-        fs.unlink(trash_dir+"/"+gc_hash[buckets[buck_idx]][filename].ver[xx], function(err) {} );
+      for (var xx = 0; xx < gc_hash[containers[buck_idx]][filename].ver.length; xx++)
+        fs.unlink(trash_dir+"/"+gc_hash[containers[buck_idx]][filename].ver[xx], function(err) {} );
       var prefix1 = filename.substr(0,PREFIX_LENGTH), prefix2 = filename.substr(PREFIX_LENGTH,PREFIX_LENGTH);
-      var fdir_path = root_path + "/" + evt.Bucket + "/versions/" + prefix1 + "/" + prefix2;
+      var fdir_path = root_path + "/" + evt.Container + "/versions/" + prefix1 + "/" + prefix2;
       var temp_file = "/tmp/"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
       var child = exec('find '+ fdir_path +"/ -type f -name \""+filename+"-*\" >"+temp_file,
         function (error, stdout, stderr) {
@@ -55,7 +55,7 @@ buck.on('gc',function(buck_idx) {
                   fs.readFile(file1,function(err2,data) {
                     if (!err2) {
                       var obj = JSON.parse(data);
-                      fs.unlink(root_path+"/"+evt.Bucket+"/"+obj.vblob_file_path,function() {} );
+                      fs.unlink(root_path+"/"+evt.Container+"/"+obj.vblob_file_path,function() {} );
                     } else {
                       //??
                     }
@@ -103,5 +103,5 @@ buck.on('gc',function(buck_idx) {
     console.log(err);
   }
 });//end of on gc event
-for (var i = 0; i < buckets.length; i++)
+for (var i = 0; i < containers.length; i++)
   buck.emit('gc',i);

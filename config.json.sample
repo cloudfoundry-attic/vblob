@@ -19,24 +19,15 @@
                 "obj_limit" : <maximum number of objects allowed to store, default is unlimited>
             }
         }
-    },
-    {
-        "s3-sonic": {
-            "type": "s3",
-            "option": {
-                "key": "<s3 key>",
-                "secret": "<s3 secret>"
-            }
-        }
     }
     ],
     "port": "3000",
-    "current_driver": "s3-sonic",
+    "current_driver": "fs-sonic",
     "logtype": "<logger type, such as winston>",
     "logfile": "<pathname for the log>",
     "keyID": "<any id for auth>",
     "secretID": "<any secret for auth>",
-    "auth": "<basic, digest or s3;  other values mean disabled>",
+    "auth": "<basic, digest;  other values mean disabled>",
     "debug": true,
     "account_file" : "./account.json",
     "account_api" : true

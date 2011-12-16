@@ -12,7 +12,7 @@ var fs = require('fs');
 
 var config = JSON.parse(fs.readFileSync('../config.json')); //must be the config you actually use for the vblob  instance
 var test_date = new Date().valueOf();
-var bucket_name = '/sonic-test'+test_date;
+var container_name = '/sonic-test'+test_date;
 var suite = vows.describe('testcfbinding: test cloundfoundry binding api on localhost:'+config.port);
 var parse_xml = require('./utils').parse_xml;
 var assertStatus = require('./utils').assertStatus;

@@ -10,15 +10,15 @@ var argv = process.argv;
 var BATCH_NUM = 1;
 var root_path = argv[2];
 var PREFIX_LENGTH = 2;
-var buckets = fs.readdirSync(root_path);
-console.log(buckets);
+var containers = fs.readdirSync(root_path);
+console.log(containers);
 var buck = new events.EventEmitter();
 buck.on('gc',function(buck_idx) {
   try {
-    var trashes = fs.readdirSync(root_path + "/" + buckets[buck_idx] + "/~gc");
-    var trash_dir = root_path + "/" + buckets[buck_idx] + "/~gc";
+    var trashes = fs.readdirSync(root_path + "/" + containers[buck_idx] + "/~gc");
+    var trash_dir = root_path + "/" + containers[buck_idx] + "/~gc";
     var evt = new events.EventEmitter();
-    evt.Bucket = buckets[i];
+    evt.Container = containers[i];
     evt.Batch = BATCH_NUM; evt.Counter = 0;
     evt.on('next',function(idx) {
       var filename = trashes[idx]; //hash-pref-suff-ts-rand1-rand
@@ -28,7 +28,7 @@ buck.on('gc',function(buck_idx) {
       filename = filename.substr(0,filename.lastIndexOf('-')); //remove rand1
       filename = filename.substr(0,filename.lastIndexOf('-')); //remove ts
       var prefix1 = filename.substr(0,PREFIX_LENGTH), prefix2 = filename.substr(PREFIX_LENGTH,PREFIX_LENGTH);
-      var fdir_path = root_path + "/" + evt.Bucket + "/versions/" + prefix1 + "/" + prefix2;
+      var fdir_path = root_path + "/" + evt.Container + "/versions/" + prefix1 + "/" + prefix2;
       var temp_file = "/tmp/"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
       var child = exec('find '+ fdir_path +"/ -type f -name \""+filename+"-*\" >"+temp_file,
         function (error, stdout, stderr) {
@@ -45,7 +45,7 @@ buck.on('gc',function(buck_idx) {
                   fs.readFile(file1,function(err2,data) {
                     if (!err2) {
                       var obj = JSON.parse(data);
-                      fs.unlink(root_path+"/"+evt.Bucket+"/"+obj.vblob_file_path,function() {} );
+                      fs.unlink(root_path+"/"+evt.Container+"/"+obj.vblob_file_path,function() {} );
                     }
                     fs.unlink(file1,function() {} );
                     if (evt2.counter > 0) evt2.emit('next',idx2+1); else
@@ -83,5 +83,5 @@ buck.on('gc',function(buck_idx) {
     console.log(err);
   }
 });//end of on gc event
-for (var i = 0; i < buckets.length; i++)
+for (var i = 0; i < containers.length; i++)
   buck.emit('gc',i);

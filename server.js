@@ -2,7 +2,7 @@
 Copyright (c) 2011 VMware, Inc.
 */
 var Logger = require('./common/logger').Logger; //logging module
-var valid_name = require('./common/bucket_name_check').is_valid_name; //bucket name check
+var valid_name = require('./common/container_name_check').is_valid_name; //container name check
 var express = require("express"); //express web framework
 var j2x = require('./common/json2xml'); //json to xml transformation
 var util = require('util');
@@ -13,7 +13,7 @@ var driver_order = { }; //give sequential numbering for drivers
 var current_driver = null; //current driver in use
 var argv = process.argv;
 var conf_file = "./config.json";
-var XMLNS = "http://s3.amazonaws.com/doc/2006-03-01/";
+var XMLNS = "https://github.com/vmware-bdc/vblob/";
 var credential_hash = { };
 for (var idx = 0; idx < argv.length; idx++)
 {
@@ -87,7 +87,6 @@ var hdr_case_conv_table = {"last-modified":"Last-Modified", "accept-ranges":"Acc
 "content-language":"Content-Language",
 "expires":"Expires", "cache-control":"Cache-Control",
 "etag":"ETag", "date":"Date", "server":"Server"};
-// for compatibility, ensure that some response headers match S3 exactly (even though HTTP headers should be case insensitive)
 var normalize_resp_headers = function (headers,method, code, body, stream) {
   headers.Connection = "close";
   if (headers.connection) { headers.Connection = headers.connection; delete headers.connection; }
@@ -106,8 +105,6 @@ var normalize_resp_headers = function (headers,method, code, body, stream) {
   }
   if (!headers.Date) { headers.Date = new Date().toUTCString(); }
   if (!headers.Server) { headers.Server = "Blob Service"; }
-  if (!headers["x-amz-request-id"]) headers["x-amz-request-id"] = "1D2E3A4D5B6E7E8F9"; //No actual request id for now
-  if (!headers["x-amz-id-2"]) headers["x-amz-id-2"] = "3F+E1E4B1D5A9E2DB6E5E3F5D8E9"; //no actual request id 2
 }
 
 var general_resp = function (res,post_proc,verb) {//post_proc is for post-processing response body
@@ -137,7 +134,7 @@ var general_resp = function (res,post_proc,verb) {//post_proc is for post-proces
 var authenticate = function(req,res,next) {
   var Authorization = req.headers.authorization;
   var targets = {};
-  if (req.params && req.params.bucket) { targets.bucket = req.params.bucket; }
+  if (req.params && req.params.container) { targets.container = req.params.container; }
   if (req.params && req.params[0]) { targets.filename = req.params[0]; }
   targets.query = req.query;
   if (auth_module) {
@@ -148,9 +145,9 @@ var authenticate = function(req,res,next) {
       return;
     }
   }
-  if (targets.bucket && !valid_name(targets.bucket)) {
-    logger.error(('Invalid bucket name: ' + targets.bucket));
-      general_resp(res,null,req.method.toLowerCase())(400,{},{Error:{Code:"InvalidBucketName",Message:"The specified bucket is not valid"}}, null);
+  if (targets.container && !valid_name(targets.container)) {
+    logger.error(('Invalid container name: ' + targets.container));
+      general_resp(res,null,req.method.toLowerCase())(400,{},{Error:{Code:"InvalidContainerName",Message:"The specified container is not valid"}}, null);
     return;
   }
   next();
@@ -288,58 +285,13 @@ if (config.account_file)
     });
   }
 }
-
-//s3 creds provisioning
-if (config.drivers[driver_order[config.current_driver]][config.current_driver].type === 's3') {
-  //add routes
-  app.put('/~s3/config[/]{0,1}$', function(req,res) {
-    var obj_str = "";
-    req.on('data', function(chunk) { obj_str += chunk.toString();
-      if (obj_str.length > 1024) {
-         req.destroy();
-         general_resp(res,null,req.method.toLowerCase())(400,{},{Error:{Code:"MaxMessageLengthExceeded",Message:"Your request was too big."}}, null);
-      }
-    } );
-    req.on('end', function() {
-      var obj;
-      try {
-        obj = JSON.parse(obj_str); obj_str = null;
-      } catch (err) {
-        general_resp(res)(400,{},{Error:{Code:"BadJSONFormat",Message:"The request has bad JSON format"}},null);
-        return;
-      }
-      //overwrite driver's config and then write back to file
-      if (config.drivers[driver_order[config.current_driver]][config.current_driver].option)
-        delete config.drivers[driver_order[config.current_driver]][config.current_driver].option;
-      config.drivers[driver_order[config.current_driver]][config.current_driver].option = obj;
-      fs.writeFileSync(conf_file, JSON.stringify(config,null, 4));
-      //now re-create s3 driver object
-      if (drivers[config.current_driver]) delete drivers[config.current_driver];
-      current_driver = null;
-      obj.logger = logger;
-      current_driver = drivers[config.current_driver] = require('./drivers/s3').createDriver(obj, function(o){
-        general_resp(res,null,req.method.toLowerCase())(200,{},null, null);
-      });
-    });
-  });
-}
 //======== END OF CF specific ============
 
-var bucket_list_post_proc = function(resp_body) {
-  if (resp_body.ListAllMyBucketsResult.Owner === undefined) {
-    resp_body.ListAllMyBucketsResult.Owner = {ID : "1a2b3c4d5e6f7" , DisplayName : "blob" } ; //inject arbitrary owner info
-  }
+var container_list_post_proc = function(resp_body) {
   return resp_body;
 };
 
-var object_list_post_proc = function(resp_body) {
-  if (resp_body.ListBucketResult.Contents) {
-    for (var i = 0; i < resp_body.ListBucketResult.Contents.length; i++) {
-      if (resp_body.ListBucketResult.Contents[i].Owner.ID === undefined) {
-        resp_body.ListBucketResult.Contents[i].Owner = {ID : "1a2b3c4d5e6f7" , DisplayName : "blob" };
-      }
-    }
-  }
+var file_list_post_proc = function(resp_body) {
   return resp_body;
 };
 
@@ -349,12 +301,12 @@ app.get('/',function(req,res) {
     general_resp(res,null,'head')(405,{'Allow':'GET'},null, null);
     return;
   }
-  current_driver.bucket_list(general_resp(res,bucket_list_post_proc));
+  current_driver.container_list(general_resp(res,container_list_post_proc));
 });
 
 
-app.get('/:bucket[/]{0,1}$', authenticate);
-app.get('/:bucket[/]{0,1}$',function(req,res) {
+app.get('/:container[/]{0,1}$', authenticate);
+app.get('/:container[/]{0,1}$',function(req,res) {
   res.client_closed = false;
   req.connection.addListener('close', function () {
     res.client_closed = true;
@@ -364,16 +316,13 @@ app.get('/:bucket[/]{0,1}$',function(req,res) {
   if (req.query.prefix) { opt.prefix = req.query.prefix; }
   if (req.query.delimiter) { opt.delimiter = req.query.delimiter; }
   if (req.query["max-keys"]) { opt["max-keys"] = req.query["max-keys"]; }
-  //if (req.query.location !== undefined) { opt.location = req.query.location; }
-  //if (req.query.logging !== undefined) { opt.logging = req.query.logging; }
-  current_driver.object_list(req.params.bucket,opt,general_resp(res,object_list_post_proc,req.method.toLowerCase()));
+  current_driver.file_list(req.params.container,opt,general_resp(res,file_list_post_proc,req.method.toLowerCase()));
 });
 
 var get_hdrs = [ 'if-modified-since','if-unmodified-since', 'if-match', 'if-none-match'];
-var get_qrys = [ 'response-content-type', 'response-content-language', 'response-expires',
-'response-cache-control', 'response-content-disposition', 'response-content-encoding'];
-app.get('/:bucket/*',authenticate);
-app.get('/:bucket/*',function(req,res) {
+var get_qrys = [];
+app.get('/:container/*',authenticate);
+app.get('/:container/*',function(req,res) {
   res.client_closed = false;
   req.connection.addListener('close', function () {
     res.client_closed = true;
@@ -385,53 +334,51 @@ app.get('/:bucket/*',function(req,res) {
     if (req.headers[get_hdrs[idx]]) options[get_hdrs[idx]] = req.headers[get_hdrs[idx]];
   if (req.headers.range) options.range = req.headers.range;
   options.method = req.method.toLowerCase();
-  current_driver.object_read(req.params.bucket, req.params[0], options,general_resp(res,null,options.method));
+  current_driver.file_read(req.params.container, req.params[0], options,general_resp(res,null,options.method));
 });
 
-app.put('/:bucket[/]{0,1}$', authenticate);
-app.put('/:bucket[/]{0,1}$',function(req,res) {
+app.put('/:container[/]{0,1}$', authenticate);
+app.put('/:container[/]{0,1}$',function(req,res) {
   //always empty option for now
-  current_driver.bucket_create(req.params.bucket,{},req,general_resp(res));
+  current_driver.container_create(req.params.container,{},req,general_resp(res));
 });
 
 var put_hdrs = [ 'cache-control', 'content-disposition', 'content-encoding', 'content-length',
 'content-type', 'expires'];
-var put_opts = ['content-md5','x-amz-storage-class'];
-var copy_hdrs = [ 'x-amz-copy-source-if-match', 'x-amz-copy-source-if-none-match',
-'x-amz-copy-source-if-unmodified-since', 'x-amz-copy-source-if-modified-since',
-'x-amz-metadata-directive', 'x-amz-storage-class'];
-app.put('/:bucket/*', authenticate);
-app.put('/:bucket/*', function(req,res) {
+var put_opts = ['content-md5'];
+var copy_hdrs = [ 'x-blb-metadata-copy-or-replace' ];
+app.put('/:container/*', authenticate);
+app.put('/:container/*', function(req,res) {
   var metadata = {}, options = {}, idx;
   for (idx = 0; idx < put_hdrs.length; idx++)
     if (req.headers[put_hdrs[idx]]) metadata[put_hdrs[idx]] = req.headers[put_hdrs[idx]];
   var keys = Object.keys(req.headers);
   for (idx = 0; idx < keys.length; idx++) {
-    if (keys[idx].match(/^x-amz-meta-/)) metadata[keys[idx]] = req.headers[keys[idx]];
+    if (keys[idx].match(/^x-blb-meta-/)) metadata[keys[idx]] = req.headers[keys[idx]];
   }
   keys = null;
-  if (req.headers['x-amz-copy-source'] ) {
-    var src = req.headers['x-amz-copy-source'];
+  if (req.headers['x-blb-copy-from'] ) {
+    var src = req.headers['x-blb-copy-from'];
     var src_buck = src.slice(1,src.indexOf('/',1));
     var src_obj = src.substr(src.indexOf('/',1)+1);
     for (idx = 0; idx < copy_hdrs.length; idx++)
       if (req.headers[copy_hdrs[idx]]) options[copy_hdrs[idx]] = req.headers[copy_hdrs[idx]];
-    current_driver.object_copy(req.params.bucket, req.params[0], src_buck, src_obj, options, metadata, general_resp(res));
+    current_driver.file_copy(req.params.container, req.params[0], src_buck, src_obj, options, metadata, general_resp(res));
   } else {
     for (idx = 0; idx < put_opts.length; idx++)
       if (req.headers[put_opts[idx]]) options[put_opts[idx]] = req.headers[put_opts[idx]];
-    current_driver.object_create(req.params.bucket,req.params[0],options,metadata,req,general_resp(res));
+    current_driver.file_create(req.params.container,req.params[0],options,metadata,req,general_resp(res));
   }
 });
 
-app.delete('/:bucket[/]{0,1}$', authenticate);
-app.delete('/:bucket[/]{0,1}$',function(req,res) {
-  current_driver.bucket_delete(req.params.bucket,general_resp(res));
+app.delete('/:container[/]{0,1}$', authenticate);
+app.delete('/:container[/]{0,1}$',function(req,res) {
+  current_driver.container_delete(req.params.container,general_resp(res));
 });
 
-app.delete('/:bucket/*',authenticate);
-app.delete('/:bucket/*',function(req,res) {
-  current_driver.object_delete(req.params.bucket,req.params[0],general_resp(res));
+app.delete('/:container/*',authenticate);
+app.delete('/:container/*',function(req,res) {
+  current_driver.file_delete(req.params.container,req.params[0],general_resp(res));
 });
 
 exports.vblob_gateway = app;
