@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2011 VMware, Inc.
+Copyright (c) 2011-2012 VMware, Inc.
 */
 var fs = require('fs');
 var events = require("events");

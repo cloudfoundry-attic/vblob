@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2011 VMware, Inc.
+Copyright (c) 2011-2012 VMware, Inc.
 */
 var Logger = require('./common/logger').Logger; //logging module
 var valid_name = require('./common/container_name_check').is_valid_name; //container name check
@@ -13,7 +13,7 @@ var driver_order = { }; //give sequential numbering for drivers
 var current_driver = null; //current driver in use
 var argv = process.argv;
 var conf_file = "./config.json";
-var XMLNS = "https://github.com/vmware-bdc/vblob/";
+var XMLNS = "http://s3.amazonaws.com/doc/2006-03-01/";
 var credential_hash = { };
 for (var idx = 0; idx < argv.length; idx++)
 {
@@ -105,6 +105,8 @@ var normalize_resp_headers = function (headers,method, code, body, stream) {
   }
   if (!headers.Date) { headers.Date = new Date().toUTCString(); }
   if (!headers.Server) { headers.Server = "Blob Service"; }
+  if (!headers["x-amz-request-id"]) headers["x-amz-request-id"] = "1D2E3A4D5B6E7E8F9"; //No actual request id for now
+  if (!headers["x-amz-id-2"]) headers["x-amz-id-2"] = "3F+E1E4B1D5A9E2DB6E5E3F5D8E9"; //no actual request id 2
 }
 
 var general_resp = function (res,post_proc,verb) {//post_proc is for post-processing response body
@@ -147,7 +149,7 @@ var authenticate = function(req,res,next) {
   }
   if (targets.container && !valid_name(targets.container)) {
     logger.error(('Invalid container name: ' + targets.container));
-      general_resp(res,null,req.method.toLowerCase())(400,{},{Error:{Code:"InvalidContainerName",Message:"The specified container is not valid"}}, null);
+      general_resp(res,null,req.method.toLowerCase())(400,{},{Error:{Code:"InvalidBucketName",Message:"The specified bucket is not valid"}}, null);
     return;
   }
   next();
@@ -288,10 +290,20 @@ if (config.account_file)
 //======== END OF CF specific ============
 
 var container_list_post_proc = function(resp_body) {
+  if (resp_body.ListAllMyBucketsResult.Owner === undefined) {
+    resp_body.ListAllMyBucketsResult.Owner = {ID : "1a2b3c4d5e6f7" , DisplayName : "blob" } ; //inject arbitrary owner info
+  }
   return resp_body;
 };
 
 var file_list_post_proc = function(resp_body) {
+  if (resp_body.ListBucketResult.Contents) {
+    for (var i = 0; i < resp_body.ListBucketResult.Contents.length; i++) {
+      if (resp_body.ListBucketResult.Contents[i].Owner.ID === undefined) {
+        resp_body.ListBucketResult.Contents[i].Owner = {ID : "1a2b3c4d5e6f7" , DisplayName : "blob" };
+      }
+    }
+  }
   return resp_body;
 };
 
@@ -320,7 +332,8 @@ app.get('/:container[/]{0,1}$',function(req,res) {
 });
 
 var get_hdrs = [ 'if-modified-since','if-unmodified-since', 'if-match', 'if-none-match'];
-var get_qrys = [];
+var get_qrys = [ 'response-content-type', 'response-content-language', 'response-expires',
+'response-cache-control', 'response-content-disposition', 'response-content-encoding'];
 app.get('/:container/*',authenticate);
 app.get('/:container/*',function(req,res) {
   res.client_closed = false;
@@ -345,8 +358,10 @@ app.put('/:container[/]{0,1}$',function(req,res) {
 
 var put_hdrs = [ 'cache-control', 'content-disposition', 'content-encoding', 'content-length',
 'content-type', 'expires'];
-var put_opts = ['content-md5'];
-var copy_hdrs = [ 'x-blb-metadata-copy-or-replace' ];
+var put_opts = ['content-md5','x-amz-storage-class'];
+var copy_hdrs = [ 'x-amz-copy-source-if-match', 'x-amz-copy-source-if-none-match',
+'x-amz-copy-source-if-unmodified-since', 'x-amz-copy-source-if-modified-since',
+'x-amz-metadata-directive', 'x-amz-storage-class'];
 app.put('/:container/*', authenticate);
 app.put('/:container/*', function(req,res) {
   var metadata = {}, options = {}, idx;
@@ -354,11 +369,11 @@ app.put('/:container/*', function(req,res) {
     if (req.headers[put_hdrs[idx]]) metadata[put_hdrs[idx]] = req.headers[put_hdrs[idx]];
   var keys = Object.keys(req.headers);
   for (idx = 0; idx < keys.length; idx++) {
-    if (keys[idx].match(/^x-blb-meta-/)) metadata[keys[idx]] = req.headers[keys[idx]];
+    if (keys[idx].match(/^x-amz-meta-/)) metadata[keys[idx]] = req.headers[keys[idx]];
   }
   keys = null;
-  if (req.headers['x-blb-copy-from'] ) {
-    var src = req.headers['x-blb-copy-from'];
+  if (req.headers['x-amz-copy-source'] ) {
+    var src = req.headers['x-amz-copy-source'];
     var src_buck = src.slice(1,src.indexOf('/',1));
     var src_obj = src.substr(src.indexOf('/',1)+1);
     for (idx = 0; idx < copy_hdrs.length; idx++)

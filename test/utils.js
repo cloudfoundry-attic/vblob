@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2011 VMware, Inc.
+Copyright (c) 2011-2012 VMware, Inc.
 */
 var events = require('events');
 var http = require('http');
@@ -179,8 +179,8 @@ module.exports.api = api = {
         path : path2,
         method : 'PUT',
         headers : { 
-          'content-length' : file_size,
-          expect : '100-continue'
+          'content-length' : file_size
+          //,expect : '100-continue'
         }
       };
       if (headers) {

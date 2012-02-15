@@ -1,18 +1,20 @@
 # node.js blob service gateway.
 
-Copyright (c) 2011 VMware, Inc.
+Copyright (c) 2011-2012 VMware, Inc.
 
-The blob service provides an HTTP endpoint to an underlying storage provider. A driver model is used for different providers. Currently the available driver includes a local file system (FS) driver.
+The blob service provides an S3-compatible HTTP endpoint to an underlying storage provider. A driver model is used for different providers. Currently the available drivers include S3 (Amazon web services) or a local file system (FS) driver.
 
 ## Authors
 - Sonic Wang (wangs@vmware.com)
 
 ## Features
 - RESTful web service
-- plugin model (currently support local fs)
+- S3 compatibility
+- plugin model (currently support local fs, s3)
 - streaming in/out blobs
 - basic blob operations: create/delete/get/copy
-- create/list/delete containers
+- create/list/delete buckets
+- s3 driver: enumerate with prefix/delimiter/marker/max-keys
 - user defined meta data
 
 ## API Documentation
@@ -55,8 +57,11 @@ now edit `config.json`
 ## FS driver setup
 The FS driver uses directories and files starting at a "root" location in the local file system. For scalability, the fs driver design supports multiple instances of the gateway operating on the same files. Metadata and blobs live in separate physical files in different directories. New files do not replace existing files until they have been fully uploaded and persisted. Old files are cleaned up using garbage collection processes which run in the background.
 
+## S3 driver setup
+The S3 driver requires a valid id/key pair from your Amazon S3 storage account (no additional metadata storage is used)
+
 ## Configuration via config.json
-The gateway and its drivers can be configured via config.json which is read at startup. Values that need to be configured are indicated with `<value>`. Drivers are assumed to live under `./drivers/<type>` -- currently only `fs` is included.  
+The gateway and its drivers can be configured via config.json which is read at startup. Values that need to be configured are indicated with `<value>`. Drivers are assumed to live under `./drivers/<type>` -- currently only `fs` and `s3` driver types are included.  
 
     {
         "drivers": [
@@ -79,6 +84,15 @@ The gateway and its drivers can be configured via config.json which is read at s
                     "obj_limit" : <maximum number of objects allowed to store, default is unlimited>
                 }
             }
+        },
+        {
+            "<s3-driver-name>": {
+                "type": "s3",
+                "option": {
+                    "key": "<s3 key>",
+                    "secret": "<s3 secret>"
+                }
+            }
         }
         ],
         "port": "<port>",
@@ -87,17 +101,21 @@ The gateway and its drivers can be configured via config.json which is read at s
         "logfile": "<pathname for the log>",
         "keyID": "<any id for auth>",
         "secretID": "<any secret for auth>",
-        "auth": "<basic, digest; other values mean disabled>",
-        "debug": true
+        "auth": "<basic, digest or s3; other values mean disabled>",
+        "debug": true,
+        "account_file" : "./account.json",
+        "account_api" : true
     }
 
 `current driver` is used to specify the driver to be used by the service at startup. Only 1 driver can be in use at any time. If no default is specified the first driver will be used.
 
 `logfile` specifies the path to the log file. The `logtype` has to be [winston](https://github.com/indexzero/winston).
 
-`keyID` and `secretID` and `auth` are used to control front-end authentication. If either the key or id is not present or if auth is not set to a proper auth type then authentication is disabled. Currently the following types are supported: "basic", and "digest". "basic" and "digest" implementation follows rfc2617.
+`keyID` and `secretID` and `auth` are used to control front-end authentication. If either the key or id is not present or if auth is not set to a proper auth type then authentication is disabled. Currently the following types are supported: "basic", "digest", and "s3". "basic" and "digest" implementation follows rfc2617.
 
 `debug` is used to log request and response headers to the console for debugging purposes. Its value is treated as boolean.
+
+`account_file` is the place where vblob instance stores the CloudFoundry service binding credentials. After a vblob service instance is provisioned in CloundFoundry, user can binding multiple CF apps to the instance. This file indicates vblob where to load and update the binding crendentials so that the apps can properly authenticate with the vblob instance. `account_api` controls whether the CF bind/unbind API is on/off in the instance. For a single node deployment, this is always set to true. For a multi-node deployment, only one node should turn on this switch. 
 
 ## Usage
 
@@ -119,11 +137,11 @@ The following curl commands assume:
 - authentication is NOT enabled. (set `"auth":"disabled"` in config.json) 
 - the node.js process is running on localhost and listening on port 3000.
 
-### Listing all containers
+### Listing all buckets
 
     curl http://localhost:3000 -v
 
-### Listing files in a container
+### Listing objects in a bucket
   
     curl http://localhost:3000/container1 -v
 
@@ -133,11 +151,11 @@ One could add a query to the URL. Currently four criteria are supported: prefix;
 
 The above query will also list virtual folders in result as well.
 
-### Create a container
+### Create a bucket
 
     curl http://localhost:3000/container1 -X PUT -v
 
-### Delete a container
+### Delete a bucket
 
     curl http://localhost:3000/container1 -X DELETE -v
 
@@ -145,17 +163,17 @@ The above query will also list virtual folders in result as well.
 
     curl http://localhost:3000/container1/file1.txt -X PUT -T file1.txt -v
 
-Currently user-defined meta data is supported. All user meta keys start with prefix `x-blb-meta-`. E.g.:
+Currently user-defined meta data is supported. All user meta keys start with prefix `x-amz-meta-`. E.g.:
 
-    curl http://localhost:3000/container1/file1.txt -X PUT -T file1.txt -H "x-blb-meta-comment:hello_world"
+    curl http://localhost:3000/container1/file1.txt -X PUT -T file1.txt -H "x-amz-meta-comment:hello_world"
 
 ### Copying a file
 
-    curl http://localhost:3000/container1/file1.txt -X PUT -H "x-blb-copy-from:/container2/file2.txt"
+    curl http://localhost:3000/container1/file1.txt -X PUT -H "x-amz-copy-source:/container2/file2.txt"
 
 The above request will direct gateway to copy file2.txt in container2 to file1.txt in container1. Currently only intra-driver copy is supported. This means both container1 and container2 must be within the same driver(backend). This operation will copy meta data as well. All user-defined meta data in file2.txt will be copied to file1.txt. 
 
-This operation will return code `200`. In addition, the response body includes a JSON format file. It has two fields: `LastModified`, and `ETag`. 
+This operation will return code `200`. In addition, the response body includes a JSON format object. It has two fields: `LastModified`, and `ETag`. 
 
 ### Deleting a file
 
@@ -168,6 +186,40 @@ This operation will return code `200`. In addition, the response body includes a
 Currently additional header `range` is supported for single range read as well. Thus user can issue something like this:
 
     curl http://localhost:3000/container1/file1.txt -H "range:bytes=123-892" -v
+
+## Using s3-curl with gateway authentication
+
+Instead of using curl with authentication disabled, the gateway can also be accessed in an authenticated fashion via s3-curl.pl which is a utility for making signed requests to s3 available on [aws](http://aws.amazon.com/code/128). 
+
+Credentials for authentication via s3-curl are stored in `.s3curl` as follows
+
+    %awsSecretAccessKeys = (
+
+        # real s3 account
+        s3 => {
+            id => '<s3-id>',
+            key => '<s3-key',
+        },
+
+       gateway => {
+            id => '<gateway-id>',
+            key => '<gateway-key>',
+        },
+    );
+
+Requests are then performed by specifying which credentials to use on the command line. Parameters for `curl` go after the `--`. E.g.
+
+    ./s3curl.pl --id gateway -- -X DELETE -v http://localhost:3000/BucketToDelete
+
+A small modification is required to add the endpoint where the gateway is running to the list of endpoints in the perl script. E.g. if you are running on localhost, you would add localhost to the @endpoints array as follows:
+
+    # begin customizing here
+    my @endpoints = ( 's3.amazonaws.com',
+                      's3-us-west-1.amazonaws.com',
+                      's3-eu-west-1.amazonaws.com',
+                      's3-ap-southeast-1.amazonaws.com',
+                      's3-ap-northeast-1.amazonaws.com',
+                      'localhost' );
 
 ## Server Tuning
 

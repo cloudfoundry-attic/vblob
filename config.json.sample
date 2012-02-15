@@ -19,6 +19,15 @@
                 "obj_limit" : <maximum number of objects allowed to store, default is unlimited>
             }
         }
+    },
+    {
+        "s3-sonic": {
+            "type": "s3",
+            "option": {
+                "key": "<s3 key>",
+                "secret": "<s3 secret>"
+            }
+        }
     }
     ],
     "port": "3000",
