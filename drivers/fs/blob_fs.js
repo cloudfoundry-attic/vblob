@@ -79,9 +79,9 @@ function error_msg(statusCode,code,msg,resp)
   //no additional info for now
 }
 
-function start_compactor(option,fb)
+function start_collector(option,fb)
 {
-  var node_exepath = option.node_exepath ? option.node_exepath : "node";
+  var node_exepath = option.node_exepath ? option.node_exepath : process.execPath;
   var ec_exepath = option.ec_exepath ? option.ec_exepath : "drivers/fs/fs_ec.js";
   var ec_interval;
   try { if (isNaN(ec_interval = parseInt(option.ec_interval,10))) throw 'isNaN'; } catch (err) { ec_interval = 1500; }
@@ -89,7 +89,7 @@ function start_compactor(option,fb)
   fb.ecid = setInterval(function() {
     if (ec_status === 1) return; //already a gc process running
     ec_status = 1;
-    exec(node_exepath + " " + ec_exepath + " " + option.root + " > /dev/null",
+    exec(node_exepath + " " + ec_exepath + " " + fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
           ec_status = 0; //finished set to 0
         } );
@@ -101,7 +101,7 @@ function start_gc(option,fb)
 {
   gc_hash = null; gc_hash = {};
   var gc_status = 0; //1 = started
-  var node_exepath = option.node_exepath ? option.node_exepath : "node";
+  var node_exepath = option.node_exepath ? option.node_exepath : process.execPath;
   var gc_exepath = option.gc_exepath ? option.gc_exepath : "drivers/fs/fs_gc.js";
   var gcfc_exepath = option.gcfc_exepath ? option.gcfc_exepath : "drivers/fs/fs_gcfc.js";
   var gc_interval;
@@ -114,7 +114,7 @@ function start_gc(option,fb)
   fb.gcid = setInterval(function() {
     if (gc_status === 1) return; //already a gc process running
     gc_status = 1;
-    exec(node_exepath + " " + gc_exepath + " " + option.root + " > /dev/null",
+    exec(node_exepath + " " + gc_exepath + " " + fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
           gc_status = 0; //finished set to 0
         } );
@@ -132,7 +132,7 @@ function start_gc(option,fb)
     fs.writeFile(tmp_fn,JSON.stringify(tmp_hash), function(err) {
       tmp_hash = null;
       if (err) { gcfc_status = 0; return; }
-      exec(node_exepath + " " + gcfc_exepath + " " + tmp_fn + " " +option.root + " > /dev/null",
+      exec(node_exepath + " " + gcfc_exepath + " " + tmp_fn + " " +fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
           gcfc_status = 0; //finished set to 0
           fs.unlink(tmp_fn,function() {} );
@@ -144,7 +144,7 @@ function start_gc(option,fb)
   fb.gctmpid = setInterval(function() {
     if (gctmp_status === 1) return; //already a gc process running
     gctmp_status = 1;
-    exec(node_exepath + " " + gctmp_exepath + " " + option.root + " > /dev/null",
+    exec(node_exepath + " " + gctmp_exepath + " " + fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
           gctmp_status = 0; //finished set to 0
         } );
@@ -190,13 +190,31 @@ function FS_blob(option,callback)  //fow now no encryption for fs
   var this1 = this;
   this.root_path = option.root; //check if path exists here
   this.logger = option.logger;
-  if (option.quota) { this.quota = parseInt(option.quota,10); this.used_quota = 0; }
+  if (option.quota) { this.quota = parseInt(option.quota,10); this.used_quota = 0; } 
+  else {this.quota = 100 * 1024 * 1024; this.used_quota=0;} //default 100MB
   if (option.obj_limit) { this.obj_limit = parseInt(option.obj_limit, 10); this.obj_count = 0; }
+  else {this.obj_limit=10000; this.obj_count=0;} //default 10,000 objects
+  if (!this1.root_path) {
+    this1.root_path = './fs_root'; //default fs root
+    try {
+      fs.mkdirSync(this1.root_path, "0775");
+    } catch (err) {
+      if (err.code != 'EEXIST') {
+        this1.logger.error( ('default root folder creation error: '+err));
+        if (callback) { callback(this1,err); }
+        return;
+      }
+    }
+  } 
   fs.stat(this1.root_path, function(err,stats) {
     if (!err) {
       start_gc(option,this1);
-      if (option.compactor === true) start_compactor(option,this1);
-      if (option.obj_limit || option.quota) setTimeout(start_quota_gathering, 1000, this1);
+      //set enumeration on by default
+      if (option.collector === undefined || option.collector === true) {
+        start_collector(option,this1);
+        //as long as enumeration is on, quotas is enabled as well
+        setTimeout(start_quota_gathering, 1000, this1);
+      }
     } else { this1.logger.error( ('root folder in fs driver is not mounted')); }
     if (callback) { callback(this1,err); }
     //check openssl

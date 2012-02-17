@@ -1,0 +1,27 @@
+{
+    "drivers": [
+    {
+        "fs-1": {
+            "type": "fs",
+            "option": {
+            }
+        }
+    },
+    {
+        "s3-1": {
+            "type": "s3",
+            "option": {
+                "key": "dummy",
+                "secret": "dummy"
+            }
+        }
+    }
+    ],
+    "port": "9981",
+    "current_driver": "fs-1",
+    "keyID": "dummy",
+    "secretID": "dummy",
+    "auth": "disabled",
+    "account_api" : true
+}
+

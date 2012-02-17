@@ -21,14 +21,22 @@ for (var idx = 0; idx < argv.length; idx++)
     { conf_file = argv[idx+1]; }
 }
 
-var config;
-try
-{
-  config  = JSON.parse(fs.readFileSync(conf_file));
-} catch (err)
-{
-  console.error("error:"+(new Date())+" - Reading configuration error: " + err);
-  return;
+var config=null;
+while (true) {
+  try
+  {
+    config  = JSON.parse(fs.readFileSync(conf_file));
+    break;
+  } catch (err)
+  {
+    if (!config)
+      console.log("warn:"+(new Date())+" - No configuration file "+conf_file);
+    else console.log("error:"+(new Date())+" - Error reading default configuration file "+conf_file+": "+err);
+    if (config !== null) return;
+    config = 'dummy value';
+  }
+  console.log("info:"+(new Date())+" - Try default configuration ./config.json.default instead");
+  conf_file = "./config.json.default";
 }
 
 if (config.keyID && config.secretID) { credential_hash[config.keyID] = config.secretID; }
@@ -162,7 +170,7 @@ if (config.debug) {
 
 //============= CF specific =========
 //account mgt
-if (config.account_file)
+if (!config.account_file) config.account_file = './account.json'; //set default value
 {
   try {
     var creds = JSON.parse(fs.readFileSync(config.account_file));
