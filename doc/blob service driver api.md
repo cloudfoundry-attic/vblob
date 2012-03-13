@@ -266,3 +266,14 @@ The following options cause the request to behave conditionally based on the mod
     file_delete (bucket_name, object_key, callback)  
 
 Deletes an object
+
+### get configuration
+
+   get_config ( )
+
+Driver constructs the current configuration into a JSON object and return it. It must follow the following pattern:
+  
+  {
+    "type" : <type of this driver, fs or s3 or whatever>,
+    "option" : { <key value pairs> }
+  }

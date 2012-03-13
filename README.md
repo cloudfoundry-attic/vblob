@@ -14,11 +14,16 @@ The blob service provides an S3-compatible HTTP endpoint to an underlying storag
 - streaming in/out blobs
 - basic blob operations: create/delete/get/copy
 - create/list/delete buckets
-- s3 driver: enumerate with prefix/delimiter/marker/max-keys
+- enumerate objects with prefix/delimiter/marker/max-keys
 - user defined meta data
 
+## FS driver
+For scalability, the file system driver supports multiple instances of the gateway operating on the same files. Metadata and blobs live in separate physical files in different directories. New files do not replace existing files until they have been fully uploaded and persisted. Old files are cleaned up using garbage collection processes which run in the background.
+
+The file system driver was designed to provide consistency without the use of any database. It depends on the file system for reference-counting hard links and atomic 'mv' operations.
+
 ## API Documentation
-- see [doc](doc) directory
+- For details of supported API features see the [doc](doc) directory
 
 ## Dependencies
 The following 3rd party npm modules have been included in the node_modules subdirectory
@@ -29,15 +34,15 @@ The following 3rd party npm modules have been included in the node_modules subdi
 - vows: test framework
 
 ## Installing node.js
-The blob service depends on [node.js](http://nodejs.org/). We are working with the v0.4 branch and v0.4.12 tag.  
+The blob service depends on [node.js](http://nodejs.org/). We are working with the v0.6 branch and v0.6.10 tag.  
 
 To match the same branch and tag from github:
 
-    $> git clone -b v0.4 https://github.com/joyent/node.git <target-directory>
+    $> git clone -b v0.6 https://github.com/joyent/node.git <target-directory>
     $> cd <target-directory>
-    $> git checkout v0.4.12
+    $> git checkout v0.6.10
 
-To build node.js (sudo?)
+To build node.js
 
     ./configure
     make
@@ -50,18 +55,20 @@ Most node.js applications require modules distributed via npm. Instructions for 
 
     $> git clone <project-url> <target-directory>
     $> cd <target-directory>
-    $> cp config.json.sample config.json
+    $> cp config.json.default config.json
     
 now edit `config.json`
 
-## FS driver setup
-The FS driver uses directories and files starting at a "root" location in the local file system. For scalability, the fs driver design supports multiple instances of the gateway operating on the same files. Metadata and blobs live in separate physical files in different directories. New files do not replace existing files until they have been fully uploaded and persisted. Old files are cleaned up using garbage collection processes which run in the background.
-
-## S3 driver setup
-The S3 driver requires a valid id/key pair from your Amazon S3 storage account (no additional metadata storage is used)
-
 ## Configuration via config.json
-The gateway and its drivers can be configured via config.json which is read at startup. Values that need to be configured are indicated with `<value>`. Drivers are assumed to live under `./drivers/<type>` -- currently only `fs` and `s3` driver types are included.  
+The gateway and its drivers can be configured via config.json which is read at startup. This file is structured as an array of drivers each with a name, type, and options, followed by some global options which include the name of the current driver. It is possible to configure multiple drivers of the same same type in the same file, but only one of these will be activated on startup.
+
+Drivers are assumed to live under `./drivers/<type>` -- currently only `fs` and `s3` driver types are included.  
+
+The FS driver stores all blobs in directories and files under a "root" location in the local file system. The default location if this value is unspecified is `./fs_root`
+
+The S3 driver requires a valid key and secret from your Amazon S3 storage account. All operations are simply passed through the gateway and handled by S3.
+
+NOTE: if no config.json file is found, the gateway will use the settings from `config.json.default`. The following listing shows all currently available config.json options for the FS and S3 drivers.
 
     {
         "drivers": [
@@ -69,19 +76,19 @@ The gateway and its drivers can be configured via config.json which is read at s
             "<fs-driver-name>": {
                 "type": "fs",
                 "option": {
-                    "root": "<pathname for storing blobs>",
-                    "node_exepath": "<optional: path to node executable>",
-                    "collector" : <true to enable enumeration collector, don't enable multiple collector instances!>,
-                    "gc_exepath": "<optional: path to gc js file, e.g. /<vblob>/blob_fs/fs_gc.js >",
-                    "gc_interval": "<optional: ms per gc execution, e.g. 600000 (10 mins) >",
-                    "gcfc_exepath": "<optional: path to lightweight gc js file, e.g. /<vblob>/blob_fs/fs_gcfc.js >",
-                    "gcfc_interval": "<optional: ms per lightweiht gc execution, e.g. 1500 (1.5 secs) >",
-                    "gctmp_exepath": "<optional: path to tmp folder gc js file, e.g. /<vblob>/blob_fs/fs_gctmp.js >",
-                    "gctmp_interval": "<optional: ms per tmp folder gc execution, e.g. 1 hr >",
-                    "ec_exepath": "<path to ec js file, e.g. /<vblob>/blob_fs/fs_ec.js >",
-                    "ec_interval": "<ms per ec execution, e.g. 1500 (1.5 secs) >",
-                    "quota": <maximum number of bytes allowed to store, default is unlimited>,
-                    "obj_limit" : <maximum number of objects allowed to store, default is unlimited>
+                    "root": "<pathname for storing blobs - default is `./fs_root` >",
+                    "node_exepath": "<path to node executable - default is `node` >",
+                    "collector" : <enable gc and enumeration - default is `true`, NOTE: must be limited to one instance >,
+                    "gc_exepath": "<path to gc js file, default is `drivers/fs/fs_gc.js` >",
+                    "gc_interval": <ms per gc execution, default is `600,000` (10 min) >,
+                    "gcfc_exepath": "<path to lightweight gc js file, default is `drivers/fs/fs_gcfc.js` >",
+                    "gcfc_interval": <ms per lightweiht gc execution, default is `1,500` (1.5 sec) >,
+                    "gctmp_exepath": "<path to tmp folder gc js file, default is `drivers/fs/fs_gctmp.js` >",
+                    "gctmp_interval": <ms per tmp folder gc execution, default is 3,600,000 (1 hr) >,
+                    "ec_exepath": "<path to ec js file, default is `drivers/fs/fs_ec.js` >",
+                    "ec_interval": <ms per ec execution, default is `1,500` (1.5 sec) >,
+                    "quota": <maximum number of bytes allowed to store, default is 100MB >,
+                    "obj_limit" : <maximum number of blobs allowed to store, default is 10,000 >
                 }
             }
         },
@@ -99,12 +106,12 @@ The gateway and its drivers can be configured via config.json which is read at s
         "current_driver": "<driver-name>",
         "logtype": "winston",
         "logfile": "<pathname for the log>",
-        "keyID": "<any id for auth>",
-        "secretID": "<any secret for auth>",
-        "auth": "<basic, digest or s3; other values mean disabled>",
-        "debug": true,
-        "account_file" : "./account.json",
-        "account_api" : true
+        "keyID": "<id for front-end authentication>",
+        "secretID": "<secret for front-end authentication>",
+        "auth": "<`basic`, `digest` or `s3`; other values mean disabled>",
+        "debug": <set to true to enable verbose output of all requests in the console>,
+        "account_file" : <pathname for the cloudfoundry binding file, default is "./account.json">,
+        "account_api" : <set to true to enable cloudfoundry service apis, default is true>
     }
 
 `current driver` is used to specify the driver to be used by the service at startup. Only 1 driver can be in use at any time. If no default is specified the first driver will be used.
@@ -121,71 +128,73 @@ The gateway and its drivers can be configured via config.json which is read at s
 
     node server.js [-f path_to_config_file]
     
-Note that `-f config-path` is optional. The gateway will look for `./config.json`.
+Note that `-f config-path` is optional. The gateway will look for `./config.json` or `./config.json.default`
 
 ## Testing
-To run the full set of unit tests, first make sure server.js is configured and running with one of the drivers, then
+To run the common (non-driver-specific) unit tests, first make sure server.js is configured and running with one of the drivers, then
 
     cd test
-    ../node_modules/vows/bin/vows test*.js --spec
+    ../node_modules/vows/bin/vows common_test/test*.js --spec
 
-NOTE: To install vows globally, use `npm install -g vows`  
+To run the fs-driver tests from the same test folder do:
+
+    ../node_modules/vows/bin/vows fs_test/test*.js --spec
+
+NOTE: To avoid invoking vows via ../node_modules, install vows globally using `npm install -g vows`  
         
 ## Manual usage with curl
 The following curl commands assume:
 
-- authentication is NOT enabled. (set `"auth":"disabled"` in config.json) 
-- the node.js process is running on localhost and listening on port 3000.
+- authentication is NOT enabled. 
+- the node.js process is running on localhost and listening on port 9981.
 
 ### Listing all buckets
 
-    curl http://localhost:3000 -v
+    curl http://localhost:9981 -v
 
 ### Listing objects in a bucket
   
-    curl http://localhost:3000/container1 -v
+    curl http://localhost:9981/container1 -v
 
-One could add a query to the URL. Currently four criteria are supported: prefix; delimiter; marker; max-keys. E.g.:
+Four parameters are supported: prefix; delimiter; marker; max-keys. E.g.:
 
-    curl "http://localhost:3000/container1/?prefix=A/&delimiter=/" -v
+    curl "http://localhost:9981/container1/?prefix=A/&delimiter=/" -v
 
-The above query will also list virtual folders in result as well.
+The above query will list virtual folders in 'container1' starting with 'A/' and using delimiter '/'.
 
 ### Create a bucket
 
-    curl http://localhost:3000/container1 -X PUT -v
+    curl http://localhost:9981/container1 -X PUT -v
 
 ### Delete a bucket
 
-    curl http://localhost:3000/container1 -X DELETE -v
+    curl http://localhost:9981/container1 -X DELETE -v
 
 ### Uploading a file
 
-    curl http://localhost:3000/container1/file1.txt -X PUT -T file1.txt -v
+    curl http://localhost:9981/container1/file1.txt -X PUT -T file1.txt -v
 
-Currently user-defined meta data is supported. All user meta keys start with prefix `x-amz-meta-`. E.g.:
+User-defined metadata is supported. All user meta keys start with prefix `x-amz-meta-`. E.g.
 
-    curl http://localhost:3000/container1/file1.txt -X PUT -T file1.txt -H "x-amz-meta-comment:hello_world"
+    curl http://localhost:9981/container1/file1.txt -X PUT -T file1.txt -H "x-amz-meta-comment:hello_world"
 
 ### Copying a file
 
-    curl http://localhost:3000/container1/file1.txt -X PUT -H "x-amz-copy-source:/container2/file2.txt"
+    curl http://localhost:9981/container1/file1.txt -X PUT -H "x-amz-copy-source:/container2/file2.txt"
 
-The above request will direct gateway to copy file2.txt in container2 to file1.txt in container1. Currently only intra-driver copy is supported. This means both container1 and container2 must be within the same driver(backend). This operation will copy meta data as well. All user-defined meta data in file2.txt will be copied to file1.txt. 
-
-This operation will return code `200`. In addition, the response body includes a JSON format object. It has two fields: `LastModified`, and `ETag`. 
+The above request copy file2.txt in container2 to file1.txt in container1. This operation will copy meta data as well.
 
 ### Deleting a file
 
-    curl http://localhost:3000/container1/file1.txt -X DELETE -v
+    curl http://localhost:9981/container1/file1.txt -X DELETE -v
 
 ### Reading a file
 
-    curl http://localhost:3000/container1/file1.txt -v
+    curl http://localhost:9981/container1/file1.txt -v
 
-Currently additional header `range` is supported for single range read as well. Thus user can issue something like this:
+Standard `range` headers are supported for single range reads. E.g.
 
-    curl http://localhost:3000/container1/file1.txt -H "range:bytes=123-892" -v
+    curl http://localhost:9981/container1/file1.txt -H "range:bytes=123-892" -v
 
 ## Using s3-curl with gateway authentication
 
@@ -209,7 +218,7 @@ Credentials for authentication via s3-curl are stored in `.s3curl` as follows
 
 Requests are then performed by specifying which credentials to use on the command line. Parameters for `curl` go after the `--`. E.g.
 
-    ./s3curl.pl --id gateway -- -X DELETE -v http://localhost:3000/BucketToDelete
+    ./s3curl.pl --id gateway -- -X DELETE -v http://localhost:9981/BucketToDelete
 
 A small modification is required to add the endpoint where the gateway is running to the list of endpoints in the perl script. E.g. if you are running on localhost, you would add localhost to the @endpoints array as follows:
 
@@ -225,4 +234,4 @@ A small modification is required to add the endpoint where the gateway is runnin
 
 When the gateway is handling a large number of concurrent requests, it may open too many file descriptors. It is suggested to increase the file descriptor limit. E.g.: in unix-type systems:
 
-    ulimit -n 16384
+    ulimit -n 8192

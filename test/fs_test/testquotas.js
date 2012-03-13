@@ -10,7 +10,8 @@ var vows = require('vows');
 var assert = require('assert');
 var fs = require('fs');
 var events = require('events');
-var config = JSON.parse(fs.readFileSync('../config.json')); //must be the config you actually use for the vblob  instance
+var config = JSON.parse(require('./utils').execSync("curl http://localhost:9981/~config")); //must be the config you actually use for the vblob  instance
+
 var test_date = new Date().valueOf();
 var container_name = '/sonic-test'+test_date;
 var suite = vows.describe('testquotas: using container '+container_name+' against driver '+config['current_driver']+' on localhost:'+config.port);
@@ -28,10 +29,10 @@ var fs_option = null;
   }
   fs_option = config.drivers[nIdx][config["current_driver"]].option;
 })();
-var unit_size = fs.statSync('./file1.txt').size;
+var unit_size = fs.statSync('./filex.dat').size;
 
 suite.addBatch({'TOPLEVEL':{
-  topic: function() {setTimeout(this.callback,3000); },
+  topic: function() {setTimeout(this.callback,6000); },
   'PUT container ' : {
     topic: api.put(container_name),
     'should respond with a 200 OK':  assertStatus(200),
@@ -46,19 +47,31 @@ suite.addBatch({'TOPLEVEL':{
       success_cnt=error_cnt=0;
       var provision_evt = new (events.EventEmitter);
       var total_num = Math.floor((fs_option["quota"]+unit_size-1)/unit_size);
-      for (var nIdx=0; nIdx<total_num; ++nIdx) {
-        var evt = api.put_data(container_name+'/testquotas-'+nIdx+'.txt','./file1.txt',{})();
-        evt.on('success',function(err,res) {
-          success_cnt++; 
-          if (success_cnt+error_cnt==total_num)
-            if (error_cnt==0) provision_evt.emit('success',null); else provision_evt.emit('error','PutFileError');
-        });
-        evt.on('error',function(err) {
-          error_cnt++;
-          if (success_cnt+error_cnt==total_num)
-            provision_evt.emit('error','PutFileError');
-        });
-      }
+      var total_num2 = fs_option["obj_limit"];
+      if (total_num2 < total_num) total_num = total_num2;
+      var batch_num = 1;
+      var batch_processor = new (events.EventEmitter);
+      batch_processor.on('next',function(nIdx) {
+        var next_nIdx = nIdx + batch_num;
+        if (next_nIdx > total_num) next_nIdx=total_num;
+        var counter = next_nIdx - nIdx;
+        for (; nIdx<next_nIdx; ++nIdx) {
+          var evt = api.put_data(container_name+'/testquotas-'+nIdx+'.txt','./filex.dat',{})();
+          evt.on('success',function(err,res) {
+            success_cnt++; counter--;
+            if (success_cnt+error_cnt==total_num)
+              if (error_cnt==0) provision_evt.emit('success',null);
+            if (counter == 0) setTimeout(function(){batch_processor.emit('next',next_nIdx);},8000);
+          });
+          evt.on('error',function(err) {
+            error_cnt++; counter--;
+            if (success_cnt+error_cnt==total_num)
+            provision_evt.emit('success',null);
+            if (counter == 0) setTimeout(function(){batch_processor.emit('next',next_nIdx);},8000);
+          });
+        }
+      });
+      batch_processor.emit('next',0);
       return provision_evt;
     },
     'all PUTs should succeed': function (err) {
@@ -67,12 +80,15 @@ suite.addBatch({'TOPLEVEL':{
   }
 }).addBatch({'TOPLEVEL':{
   topic: function() {
-    setTimeout(this.callback, 6000);
+    setTimeout(this.callback, 10000);
   },
   'PUT container/testquotas-x.txt': {
-    topic: api.put_data(container_name+'/testquotas-x.txt','./file1.txt'),
-    'should respond with a 500 code':  assertStatus(500),
+    topic: api.put_data(container_name+'/testquotas-x.txt','./filex.dat'),
+    'should respond with a 500 code':  function(err,res) {
+      if (!err) assert.equal(res.statusCode,500);
+    },
     'should respond with error message': function (err,res) {
+      if (!err)
       assert.isObject(res.resp_body.Error);
     } 
   }
@@ -83,10 +99,10 @@ suite.addBatch({'TOPLEVEL':{
   }
 }).addBatch({'TOPLEVEL2': {
   topic: function() {
-    setTimeout(this.callback,6000); //wait 6 seconds
+    setTimeout(this.callback,10000);
   },
   'PUT container/testquotas-0.txt': {
-    topic: api.put_data(container_name+'/testquotas-0.txt','./file1.txt',{}),
+    topic: api.put_data(container_name+'/testquotas-0.txt','./filex.dat',{}),
     'should respond with a 200 code':  assertStatus(200)
   }
 }}).addBatch({
@@ -96,19 +112,31 @@ suite.addBatch({'TOPLEVEL':{
       success_cnt=error_cnt=0;
       var provision_evt = new (events.EventEmitter);
       var total_num = Math.floor((fs_option["quota"]+unit_size-1)/unit_size);
-      for (var nIdx=0; nIdx<total_num; ++nIdx) {
-        var evt = api.del(container_name+'/testquotas-'+nIdx+'.txt')();
-        evt.on('success',function(err,res) {
-          success_cnt++; 
-          if (success_cnt+error_cnt==total_num)
-            if (error_cnt==0) provision_evt.emit('success',null); else provision_evt.emit('error','DeleteFileError');
-        });
-        evt.on('error',function(err) {
-          error_cnt++;
-          if (success_cnt+error_cnt==total_num)
-            provision_evt.emit('error','DeleteFileError');
-        });
-      }
+      var total_num2 = fs_option["obj_limit"];
+      if (total_num2 < total_num) total_num = total_num2;
+      var batch_num = 1;
+      var batch_processor = new (events.EventEmitter);
+      batch_processor.on('next',function(nIdx) {
+        var next_nIdx = nIdx + batch_num;
+        if (next_nIdx > total_num) next_nIdx=total_num;
+        var counter = next_nIdx - nIdx;
+        for (; nIdx<next_nIdx; ++nIdx) {
+          var evt = api.del(container_name+'/testquotas-'+nIdx+'.txt')();
+          evt.on('success',function(err,res) {
+            success_cnt++;  counter--;
+            if (success_cnt+error_cnt==total_num)
+              if (error_cnt==0) provision_evt.emit('success',null); else provision_evt.emit('error','DeleteFileError');
+            if (counter == 0) setTimeout(function(){batch_processor.emit('next',next_nIdx);},6000);
+          });
+          evt.on('error',function(err) {
+            error_cnt++; counter--;
+            if (success_cnt+error_cnt==total_num)
+              provision_evt.emit('error','DeleteFileError');
+            if (counter == 0) setTimeout(function(){batch_processor.emit('next',next_nIdx);},6000);
+          });
+        }
+      });
+      batch_processor.emit('next',0);
       return provision_evt;
     },
     'all DELETEs should succeed': function (err) {

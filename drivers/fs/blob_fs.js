@@ -82,9 +82,12 @@ function error_msg(statusCode,code,msg,resp)
 function start_collector(option,fb)
 {
   var node_exepath = option.node_exepath ? option.node_exepath : process.execPath;
-  var ec_exepath = option.ec_exepath ? option.ec_exepath : "drivers/fs/fs_ec.js";
+  var ec_exepath = option.ec_exepath ? option.ec_exepath : __dirname+"/fs_ec.js";
   var ec_interval;
   try { if (isNaN(ec_interval = parseInt(option.ec_interval,10))) throw 'isNaN'; } catch (err) { ec_interval = 1500; }
+  fb.node_exepath = node_exepath;
+  fb.ec_exepath = ec_exepath;
+  fb.ec_interval = ec_interval;
   var ec_status = 0;
   fb.ecid = setInterval(function() {
     if (ec_status === 1) return; //already a gc process running
@@ -92,6 +95,9 @@ function start_collector(option,fb)
     exec(node_exepath + " " + ec_exepath + " " + fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
           ec_status = 0; //finished set to 0
+          if (error || stderr) {
+            fb.logger.warn('enumeration collector error: ' + error?error:''+'-- '+stderr?stderr:'');
+          }
         } );
     }, ec_interval);
   
@@ -102,21 +108,31 @@ function start_gc(option,fb)
   gc_hash = null; gc_hash = {};
   var gc_status = 0; //1 = started
   var node_exepath = option.node_exepath ? option.node_exepath : process.execPath;
-  var gc_exepath = option.gc_exepath ? option.gc_exepath : "drivers/fs/fs_gc.js";
-  var gcfc_exepath = option.gcfc_exepath ? option.gcfc_exepath : "drivers/fs/fs_gcfc.js";
+  var gc_exepath = option.gc_exepath ? option.gc_exepath : __dirname+"/fs_gc.js";
+  var gcfc_exepath = option.gcfc_exepath ? option.gcfc_exepath : __dirname+"/fs_gcfc.js";
   var gc_interval;
   var gcfc_interval;
   var gctmp_interval;
   try { if (isNaN(gc_interval = parseInt(option.gc_interval,10))) throw 'isNaN'; } catch (err) { gc_interval = 600000; }
   try { if (isNaN(gcfc_interval = parseInt(option.gcfc_interval,10))) throw 'isNaN'; } catch (err) { gcfc_interval = 1500; }
   try { if (isNaN(gctmp_interval = parseInt(option.gctmp_interval,10))) throw 'isNaN'; } catch (err) { gctmp_interval = 3600000; }
-  var gctmp_exepath = option.gctmp_exepath ? option.gctmp_exepath : "drivers/fs/fs_gctmp.js";
+  var gctmp_exepath = option.gctmp_exepath ? option.gctmp_exepath : __dirname+"/fs_gctmp.js";
+  fb.node_exepath = node_exepath;
+  fb.gc_exepath = gc_exepath;
+  fb.gcfc_exepath = gcfc_exepath;
+  fb.gctmp_exepath = gctmp_exepath;
+  fb.gc_interval = gc_interval;
+  fb.gcfc_interval = gcfc_interval;
+  fb.gctmp_interval = gctmp_interval;
   fb.gcid = setInterval(function() {
     if (gc_status === 1) return; //already a gc process running
     gc_status = 1;
     exec(node_exepath + " " + gc_exepath + " " + fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
           gc_status = 0; //finished set to 0
+          if (error || stderr) {
+            fb.logger.warn('garbage collector error: ' + error?error:''+'-- '+stderr?stderr:'');
+          }
         } );
     }, gc_interval);
 
@@ -135,6 +151,9 @@ function start_gc(option,fb)
       exec(node_exepath + " " + gcfc_exepath + " " + tmp_fn + " " +fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
           gcfc_status = 0; //finished set to 0
+          if (error || stderr) {
+            fb.logger.warn('light weight garbage collector error: ' + error?error:''+'-- '+stderr?stderr:'');
+          }
           fs.unlink(tmp_fn,function() {} );
         } );
     });
@@ -146,9 +165,31 @@ function start_gc(option,fb)
     gctmp_status = 1;
     exec(node_exepath + " " + gctmp_exepath + " " + fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
+          if (error || stderr) {
+            fb.logger.warn('tmp garbage collector error: ' + error?error:''+'-- '+stderr?stderr:'');
+          }
           gctmp_status = 0; //finished set to 0
         } );
     }, gctmp_interval);
+  //gc left over files
+  var current_ts = new Date().valueOf();
+  setTimeout(function() {
+    fb.logger.info('start to collect left over tmp files');
+    exec(node_exepath + " " + gctmp_exepath + " " + fb.root_path + " --ts "+current_ts+" > /dev/null",
+        function(error,stdout, stderr) {
+          if (error || stderr) {
+            fb.logger.warn('error in gc left over tmp files: ' + error?error:''+'-- '+stderr?stderr:'');
+          }
+          fb.logger.info('left over tmp files collected; now start to collect left over gc files');
+          exec(node_exepath + " " + gc_exepath + " " + fb.root_path + " --ts "+current_ts+" ",
+              function(error2,stdout2, stderr2) {
+                if (error2 || stderr2) {
+                  fb.logger.warn('error in gc left over gc files: ' + error2?error2:''+'-- '+stderr2?stderr2:'');
+                }
+                else fb.logger.info('left over gc files collected');
+              } );
+        } );
+  },500);
 }
 
 function start_quota_gathering(fb)
@@ -211,6 +252,7 @@ function FS_blob(option,callback)  //fow now no encryption for fs
       start_gc(option,this1);
       //set enumeration on by default
       if (option.collector === undefined || option.collector === true) {
+        this.collector = true;
         start_collector(option,this1);
         //as long as enumeration is on, quotas is enabled as well
         setTimeout(start_quota_gathering, 1000, this1);
@@ -647,6 +689,7 @@ FS_blob.prototype.file_create_meta = function (container_name, filename, temp_pa
             //now we can remove temp
             fs.unlink(temp_path,function(err) {});
     //step 8 respond
+            fb.logger.debug("file creation "+doc.vblob_file_version+" complete, now reply back...");
             callback(resp.resp_code, resp.resp_header, resp.resp_body,null);
           }
         );
@@ -1209,6 +1252,26 @@ FS_Driver.prototype.file_delete = function(container_name,file_key,callback) {
 FS_Driver.prototype.container_delete = function(container_name,callback) {
   if (check_client(this.client,callback) === false) return;
   this.client.container_delete(container_name,callback,this.client);
+};
+
+FS_Driver.prototype.get_config = function() {
+  var obj = {}; var obj2 = {};
+  obj.type = "fs";
+  obj2.root= this.client.root_path;
+  obj2.node_exepath = this.client.node_exepath;
+  obj2.gc_exepath = this.client.gc_exepath;
+  obj2.gc_interval = this.client.gc_interval;
+  obj2.gcfc_exepath = this.client.gcfc_exepath;
+  obj2.gcfc_interval = this.client.gcfc_interval;
+  obj2.gctmp_exepath = this.client.gctmp_exepath;
+  obj2.gctmp_interval = this.client.gctmp_interval;
+  obj2.ec_exepath = this.client.ec_exepath;
+  obj2.ec_interval = this.client.ec_interval;
+  obj2.collector = this.client.collector;
+  obj2.quota = this.client.quota;
+  obj2.obj_limit = this.client.obj_limit;
+  obj.option = obj2;
+  return obj;
 };
 
 module.exports.createDriver = function(option,callback) {

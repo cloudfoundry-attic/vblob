@@ -315,6 +315,30 @@ var file_list_post_proc = function(resp_body) {
   return resp_body;
 };
 
+//============== config api =============
+app.get('/~config[/]{0,1}$',authenticate);
+app.get('/~config[/]{0,1}$',function(req,res) {
+  //construct the configuration json and send back
+  var conf_obj = {};
+  conf_obj.port = config.port;
+  conf_obj.logtype = config.logtype;
+  conf_obj.logfile = config.logfile;
+  conf_obj.keyID = config.keyID;
+  conf_obj.secretID = config.secretID;
+  conf_obj.auth = config.auth;
+  conf_obj.debug = config.debug;
+  conf_obj.account_file = config.account_file;
+  conf_obj.account_api = config.account_api;
+  conf_obj.drivers = [];
+  if (current_driver) {
+    conf_obj.current_driver = 'driver1';//any namewould work here
+    conf_obj.drivers.push({"driver1":current_driver.get_config()});
+  }
+  res.write(JSON.stringify(conf_obj));
+  res.end(); 
+});
+//============== end of config api ======
+
 app.get('/',authenticate);
 app.get('/',function(req,res) {
   if (req.method === 'HEAD') { //not allowed

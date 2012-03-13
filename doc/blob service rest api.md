@@ -61,30 +61,6 @@ For interoperability, the Blob service restricts bucket names following the DNS-
 - no IP address
 - no "-" at end
 
-
-#### Additional interfaces
-The following non-s3 API has been provided for configuration purposes.
-
-    PUT /~s3/config
-
-This PUT provides a way for users to install their s3 credentials into a running blob service gateway. The payload of the PUT must be valid JSON of the form:
-
-    {
-        "key": "<s3-key>",
-        "secret": "<s3-secret>"
-    }
-
-After provisioning a new blob service instance with the s3 driver in Cloud Foundry, users will see the following 403 error on all bucket and object requests until they provide their s3 credentials through the /~s3/config interface.
-
-    <?xml version="1.0"?>
-    <Error>
-      <Code>InvalidAccessKeyId</Code>
-      <Message>The AWS Access Key Id you provided does not exist in our records.</Message>
-      <RequestId>23C339093A762DB9</RequestId>
-      <HostId>ITsnu6iASQP/ZnI7tJ+46Pq2Kjq1lXHOy2NDQq7mTer0A9FdMjTC3knd1dU4Zf6c</HostId>
-      <AWSAccessKeyId>dummy</AWSAccessKeyId>
-    </Error>
-
 ## Working with buckets
 
 ### List buckets
@@ -625,3 +601,6 @@ In addition, the following GET, HEAD, and PUT request parameters are not current
 - `?uploads`, `&PartNumber` and `&UploadID` -- see [aws multi-part uploads doc](http://docs.amazonwebservices.com/AmazonS3/latest/API/index.html?mpUploadInitiate.html)
 
 
+## Get configuration operation
+
+`GET /~config` will return a stringified JSON object of the vblob instance's current configuration.

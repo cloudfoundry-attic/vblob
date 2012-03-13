@@ -10,7 +10,8 @@ var vows = require('vows');
 var assert = require('assert');
 var fs = require('fs');
 var events = require('events');
-var config = JSON.parse(fs.readFileSync('../config.json')); //must be the config you actually use for the vblob  instance
+var config = JSON.parse(require('./utils').execSync("curl http://localhost:9981/~config")); //must be the config you actually use for the vblob  instance
+
 var test_date = new Date().valueOf();
 var container_name = '/sonic-test'+test_date;
 var suite = vows.describe('testgetfile: using container '+container_name+' against driver '+config['current_driver']+' on localhost:'+config.port);

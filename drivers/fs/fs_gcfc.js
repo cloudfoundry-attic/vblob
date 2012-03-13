@@ -76,7 +76,7 @@ buck.on('gc',function(buck_idx) {
             evt2.emit('next',0);
           } else {
             fs.unlink(temp_file,function() {});
-            console.log('error!' + error);
+            console.error('error!' + error);
             evt.Counter++; evt.Batch--;
             if (evt.Batch === 0) {  evt.Batch = BATCH_NUM; evt.emit('nextbatch'); }
           }
@@ -100,7 +100,7 @@ buck.on('gc',function(buck_idx) {
     });
     evt.emit('nextbatch');
   } catch (err) {
-    console.log(err);
+    console.error(err);
   }
 });//end of on gc event
 for (var i = 0; i < containers.length; i++)

@@ -48,6 +48,15 @@ buck.on('compact',function(buck_idx) {
       _used_quota = parseInt(obj_q.storage,10);
     } catch (e) {
     }
+    var ivt_enum = {};
+    var keys1 = Object.keys(enum_base);
+    for (var nIdx1=0; nIdx1<keys1.length; nIdx1++) {
+      var ver1 = enum_base[keys1[nIdx1]].version;
+      ver1 = ver1.substr(0,ver1.lastIndexOf('-'));  //remove rand2
+      ver1 = ver1.substr(0,ver1.lastIndexOf('-')); //remove rand1
+      ver1 = ver1.substr(0,ver1.lastIndexOf('-')); //remove ts
+      ivt_enum[ver1] = keys1[nIdx1];
+    }
     var temp_file = "/tmp/"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
     var child = exec('find '+ enum_dir +"/ -type f -name \"delta-*\" >"+temp_file,
       function (error, stdout, stderr) {
@@ -67,8 +76,12 @@ buck.on('compact',function(buck_idx) {
                   var keys = Object.keys(obj);
                   for (var i = 0; i < keys.length; i++) {
                     var key = keys[i];
+                    if (obj[key] == 0) {
+                      if (ivt_enum[key]) key = ivt_enum[key]; else continue; //look up file name by fingerprint
+                    }
                     //CALC FINGERPRINT AND READ META
                     var filename = get_key_fingerprint(key);
+                    ivt_enum[filename] = key;
                     var pref1 = filename.substr(0,2), pref2 = filename.substr(2,2);
                     try {
                       var data2 = fs.readFileSync(meta_dir+"/"+pref1+"/"+pref2+"/"+filename);
@@ -105,12 +118,12 @@ buck.on('compact',function(buck_idx) {
           evt2.emit('next',0);
         } else {
           fs.unlink(temp_file,function() {});
-          console.log('error!' + error);
+          console.error('error!' + error);
         }
       }
     ); //end of exec callback
   } catch (err) {
-    console.log(err);
+    console.error(err);
   }
 });//end of on compact event
 for (var i = 0; i < containers.length; i++)

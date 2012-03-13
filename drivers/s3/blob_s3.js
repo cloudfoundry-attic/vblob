@@ -387,6 +387,18 @@ S3_Driver.prototype.container_delete = function(bucket_name,callback)
   this.client.container_delete(bucket_name,callback);
 };
 
+S3_Driver.prototype.get_config = function() {
+  var obj = {}; var obj2 = {};
+  obj.type = "s3";
+  obj2.key = this.client.client.key;
+  obj2.secret = this.client.client.secret;
+  obj2.endpoint = this.client.client.endpoint;
+  obj2.endport = this.client.client.endport;
+  obj2.protocol = this.client.client.protocol;
+  obj.option = obj2;
+  return obj;
+};
+
 module.exports.createDriver = function(option,callback) {
   return new S3_Driver(option,callback);
 };

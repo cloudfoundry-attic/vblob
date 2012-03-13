@@ -19,6 +19,8 @@
     ],
     "port": "9981",
     "current_driver": "fs-1",
+    "logtype": "winston",
+    "logfile": "./log.txt",
     "keyID": "dummy",
     "secretID": "dummy",
     "auth": "disabled",

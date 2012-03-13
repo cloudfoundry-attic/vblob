@@ -6,7 +6,8 @@ var vows = require('vows');
 var assert = require('assert');
 var fs = require('fs');
 
-var config = JSON.parse(fs.readFileSync('../config.json')); //must be the config you actually use for the vblob  instance
+var config = JSON.parse(require('./utils').execSync("curl http://localhost:9981/~config")); //must be the config you actually use for the vblob  instance
+
 var test_date = new Date().valueOf();
 var container_name = '/sonic-test'+test_date;
 var suite = vows.describe('testlistfiles: using container '+container_name+' against driver '+config['current_driver']+' on localhost:'+config.port);
@@ -46,7 +47,7 @@ suite.addBatch({
   }
 }).addBatch({'TOPLEVEL': {
   topic: function() {
-    setTimeout(this.callback, 2000); //wait 2 seconds
+    setTimeout(this.callback, 5000); //wait 5 seconds
   },
   'GET container': {
     topic: api.get(container_name),
