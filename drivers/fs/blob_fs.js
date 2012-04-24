@@ -96,7 +96,11 @@ function start_collector(option,fb)
         function(error,stdout, stderr) {
           ec_status = 0; //finished set to 0
           if (error || stderr) {
-            fb.logger.warn('enumeration collector error: ' + error?error:''+'-- '+stderr?stderr:'');
+            var msg = 'enumeration collector error: ';
+            try {
+              msg += error?error:''+'-- '+stderr?stderr:'';
+            } catch (e) { }
+            fb.logger.warn(msg);
           }
         } );
     }, ec_interval);
@@ -131,7 +135,11 @@ function start_gc(option,fb)
         function(error,stdout, stderr) {
           gc_status = 0; //finished set to 0
           if (error || stderr) {
-            fb.logger.warn('garbage collector error: ' + error?error:''+'-- '+stderr?stderr:'');
+            var msg = 'garbage collector error: ';
+            try {
+              msg += error?error:''+'-- '+stderr?stderr:'';
+            } catch (e) { }
+            fb.logger.warn(msg);
           }
         } );
     }, gc_interval);
@@ -152,7 +160,11 @@ function start_gc(option,fb)
         function(error,stdout, stderr) {
           gcfc_status = 0; //finished set to 0
           if (error || stderr) {
-            fb.logger.warn('light weight garbage collector error: ' + error?error:''+'-- '+stderr?stderr:'');
+            var msg = 'light weight garbage collector error: ';
+            try {
+              msg += error?error:''+'-- '+stderr?stderr:'';
+            } catch (e) { }
+            fb.logger.warn(msg);
           }
           fs.unlink(tmp_fn,function() {} );
         } );
@@ -166,7 +178,11 @@ function start_gc(option,fb)
     exec(node_exepath + " " + gctmp_exepath + " " + fb.root_path + " > /dev/null",
         function(error,stdout, stderr) {
           if (error || stderr) {
-            fb.logger.warn('tmp garbage collector error: ' + error?error:''+'-- '+stderr?stderr:'');
+            var msg = 'tmp garbage collector error: ';
+            try {
+              msg += error?error:''+'-- '+stderr?stderr:'';
+            } catch (e) { }
+            fb.logger.warn(msg);
           }
           gctmp_status = 0; //finished set to 0
         } );
