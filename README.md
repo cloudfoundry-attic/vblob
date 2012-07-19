@@ -235,3 +235,8 @@ A small modification is required to add the endpoint where the gateway is runnin
 When the gateway is handling a large number of concurrent requests, it may open too many file descriptors. It is suggested to increase the file descriptor limit. E.g.: in unix-type systems:
 
     ulimit -n 8192
+
+## File a Bug
+
+To file a bug against Cloud Foundry Open Source and its components, sign up and use our
+bug tracking system: [http://cloudfoundry.atlassian.net](http://cloudfoundry.atlassian.net)
