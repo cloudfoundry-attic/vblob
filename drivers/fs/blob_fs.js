@@ -647,7 +647,7 @@ FS_blob.prototype.file_create_meta = function (container_name, filename, temp_pa
     { doc[key] = opt[key]; }
   }
   var dDate = new Date();
-  doc.vblob_update_time = dDate.toString();
+  doc.vblob_update_time = dDate.toUTCString().replace(/UTC/ig, "GMT"); //RFC 822
   doc.vblob_file_name = filename;
   //temp_path will be writen twice, to prevent losing information when crash in the middle of an upload
   fs.writeFile(temp_path,JSON.stringify(doc), function(err) {

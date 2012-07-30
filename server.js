@@ -111,7 +111,7 @@ var normalize_resp_headers = function (headers,method, code, body, stream) {
   if (body || code === 204) { //xml response, not content-length
     if (headers["Content-Length"]) delete headers["Content-Length"];
   }
-  if (!headers.Date) { headers.Date = new Date().toUTCString(); }
+  if (!headers.Date) { headers.Date = new Date().toUTCString().replace(/UTC/ig, "GMT"); } //RFC 822 
   if (!headers.Server) { headers.Server = "Blob Service"; }
   if (!headers["x-amz-request-id"]) headers["x-amz-request-id"] = "1D2E3A4D5B6E7E8F9"; //No actual request id for now
   if (!headers["x-amz-id-2"]) headers["x-amz-id-2"] = "3F+E1E4B1D5A9E2DB6E5E3F5D8E9"; //no actual request id 2
