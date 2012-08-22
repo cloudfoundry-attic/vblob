@@ -16,6 +16,7 @@ var GC_FOLDER = "~gc";
 var ENUM_FOLDER = "~enum";
 var MAX_COPY_RETRY = 3;
 var MAX_READ_RETRY = 3;
+var MAX_DEL_RETRY = 6;
 var openssl_available = false; //by default do not use openssl to calculate md5
 var gc_hash = {}; //for caching gc info;
 var enum_cache = {};
@@ -149,7 +150,7 @@ function start_gc(option,fb)
   fb.gcfcid = setInterval(function() {
     if (gcfc_status === 1 || gc_hash === null || Object.keys(gc_hash).length === 0) return; //optimization to avoid empty loop
     gcfc_status = 1;
-    var tmp_fn = "/tmp/gcfc-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000);
+    var tmp_fn = "/tmp/gcfc-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
     var tmp_hash = gc_hash;
     gc_hash = null;
     gc_hash = {};
@@ -223,7 +224,7 @@ function start_quota_gathering(fb)
     evt.on("Get Usage",function (dir_name, idx) {
       fs.readFile(fb.root_path+"/"+dir_name+"/~enum/quota", function(err,data) {
           if (err) { obj_count[idx] = null; used_quota[idx] = null; } else
-          { var obj = JSON.parse(data); obj_count[idx] = parseInt(obj.count,10); used_quota[idx] = parseInt(obj.storage,10); }
+          { try { var obj = JSON.parse(data); obj_count[idx] = parseInt(obj.count,10); used_quota[idx] = parseInt(obj.storage,10); } catch (e) { obj_count[idx] = null; used_quota[idx] = null; } }
           counter--; if (counter === 0) { evt.emit("Start Aggregate"); }
       });
     });
@@ -367,8 +368,8 @@ FS_blob.prototype.container_delete = function(container_name,callback,fb)
   }
   var fn1,fn2;
   var da = new Date().valueOf();
-  fn1 = '/tmp/find1-'+da+Math.floor(Math.random() * 10000);
-  fn2 = '/tmp/find2-'+da+Math.floor(Math.random() * 10000);
+  fn1 = '/tmp/find1-'+da+"-"+Math.floor(Math.random() * 10000)+"-"+Math.floor(Math.random()*10000);
+  fn2 = '/tmp/find2-'+da+"-"+Math.floor(Math.random() * 10000)+"-"+Math.floor(Math.random()*10000);
   var child1 = exec('find '+c_path+"/*/* -type d -empty > "+fn1, function(error,stdout,stderr) {
       var child2 = exec('find '+c_path+"/*/* -type d > "+fn2, function(error,stdout,stderr) {
         var child3 =  exec('diff -q '+fn1+" "+fn2, function(error,stdout,stderr) {
@@ -386,8 +387,10 @@ FS_blob.prototype.container_delete = function(container_name,callback,fb)
             resp_code = resp.resp_code; resp_header = resp.resp_header; resp_body = resp.resp_body;
             callback(resp_code, resp_header, resp_body, null);
           }
-          fs.unlink(fn1,function(err) {} );
-          fs.unlink(fn2,function(err) {} );
+          var retry_cnt=0;
+          while (retry_cnt < MAX_DEL_RETRY) { try { fs.unlinkSync(fn1); } catch (e) {} ; retry_cnt++; }
+          retry_cnt=0;
+          while (retry_cnt < MAX_DEL_RETRY) { try { fs.unlinkSync(fn2); } catch (e) {} ; retry_cnt++; }
         });
    });
   });
