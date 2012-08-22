@@ -25,6 +25,7 @@ for (var ii = 0; ii < argv.length; ii++) {
 var BATCH_NUM = 1;
 var root_path = argv[2];
 var PREFIX_LENGTH = 2;
+var MAX_TRIES = 5;
 var containers = fs.readdirSync(root_path);
 console.log(containers);
 var buck = new events.EventEmitter();
@@ -74,12 +75,13 @@ buck.on('gc',function(buck_idx) {
       filename = filename.substr(0,filename.lastIndexOf('-')); //remove ts
       var prefix1 = filename.substr(0,PREFIX_LENGTH), prefix2 = filename.substr(PREFIX_LENGTH,PREFIX_LENGTH);
       var fdir_path = root_path + "/" + evt.Container + "/versions/" + prefix1 + "/" + prefix2;
-      var temp_file = "/tmp/"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
+      var temp_file = "/tmp/gctmp-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
       var child = exec('find '+ fdir_path +"/ -type f -name \""+filename+"-*\" >"+temp_file,
         function (error, stdout, stderr) {
           if (!error) {
             var versions = fs.readFileSync(temp_file).toString().split("\n");
-            fs.unlink(temp_file,function() {});
+            var try_cnt=0;
+            while (try_cnt<MAX_TRIES) { try {fs.unlinkSync(temp_file); } catch (e) {}; try_cnt++; }
             var evt2 = new events.EventEmitter();
             evt2.counter = versions.length;
             evt2.on('next',function(idx2) {

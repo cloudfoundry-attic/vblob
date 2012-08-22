@@ -30,7 +30,7 @@ function get_key_fingerprint(filename)
   }
   return digest+'-'+prefix+'-'+suffix;
 }
-
+var MAX_TRIES = 5;
 var argv = process.argv;
 var root_path = argv[2];
 var buck = new events.EventEmitter();
@@ -61,9 +61,22 @@ buck.on('compact',function(buck_idx) {
     var child = exec('find '+ enum_dir +"/ -type f -name \"delta-*\" >"+temp_file,
       function (error, stdout, stderr) {
         if (!error) {
-          var versions = fs.readFileSync(temp_file).toString().split("\n");
-          versions = versions.sort(); //by time stamp
-          fs.unlink(temp_file,function() {});
+          var versions = {};
+          try {
+            versions = fs.readFileSync(temp_file).toString().split("\n");
+            versions = versions.sort(); //by time stamp
+          } catch (e) {
+            fs.writeFileSync(temp_file+"-error"," "+e);
+            fs.unlink(temp_file,function() {});
+            return;
+          }
+          var deleted = 0;
+          while (deleted < MAX_TRIES) {
+            try {
+              fs.unlinkSync(temp_file);
+            } catch (e) { };
+              deleted++;
+          }
           if (versions.length === 0 || versions.length === 1 && versions[0] === '') return;
           var evt2 = new events.EventEmitter();
           evt2.counter = versions.length;
@@ -88,7 +101,7 @@ buck.on('compact',function(buck_idx) {
                       var obj2 = JSON.parse(data2);
                       var old_size = enum_base[key]?enum_base[key].size:0;
                       enum_base[key] = {};
-                      enum_base[key].size = obj2.vblob_file_size; 
+                      enum_base[key].size = obj2.vblob_file_size;
                       enum_base[key].etag = obj2.vblob_file_etag;
                       enum_base[key].lastmodified = obj2.vblob_update_time;
                       enum_base[key].version = obj2.vblob_file_version;
@@ -104,20 +117,30 @@ buck.on('compact',function(buck_idx) {
                   //?
                 }
                 //UPDATE BASE
-                fs.unlinkSync(enum_dir+"/base");
-                fs.writeFileSync(enum_dir+"/base",JSON.stringify(enum_base));
-                try {
-                  fs.unlinkSync(enum_dir+"/quota");
-                } catch (e) {}
+                var sync_cnt = 0;
+                while (sync_cnt < MAX_TRIES) { try { fs.unlinkSync(enum_dir+"/base"); } catch (e) {}; sync_cnt++;}
+                sync_cnt=0;
+                while (sync_cnt < MAX_TRIES) { try { fs.writeFileSync(enum_dir+"/base",JSON.stringify(enum_base)); } catch (e) {}; sync_cnt++; }
+                sync_cnt=0;
+                while (sync_cnt < MAX_TRIES) {
+                  try {
+                    fs.unlinkSync(enum_dir+"/quota");
+                  } catch (e) {};
+                  sync_cnt++;
+                }
                 var obj_cnt = Object.keys(enum_base).length;
-                fs.writeFileSync(enum_dir+"/quota","{\"storage\":"+_used_quota+",\"count\":"+obj_cnt+"}");
-                fs.unlink(file1,function() {} );
-                if (evt2.counter > 0) evt2.emit('next',idx2+1); 
+                sync_cnt=0;
+                while (sync_cnt<MAX_TRIES) { try { fs.writeFileSync(enum_dir+"/quota","{\"storage\":"+_used_quota+",\"count\":"+obj_cnt+"}"); } catch (e) {}; sync_cnt++; }
+                sync_cnt=0;
+                while (sync_cnt < MAX_TRIES) { try { fs.unlinkSync(file1);} catch (e) { }; sync_cnt++; };
+                if (evt2.counter > 0) evt2.emit('next',idx2+1);
               });
           }); //end of next
           evt2.emit('next',0);
         } else {
-          fs.unlink(temp_file,function() {});
+          try {
+            fs.unlinkSync(temp_file);
+          } catch (e) { }
           console.error('error!' + error);
         }
       }

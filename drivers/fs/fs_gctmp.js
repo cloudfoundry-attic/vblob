@@ -52,8 +52,8 @@ buck.on('gc',function(buck_idx) {
           return;
         }
         var mtime = new Date(stats.mtime).valueOf();
-        if ( !force && 
-             (gc_timestamp && gc_timestamp < mtime //created later than the specified timestamp 
+        if ( !force &&
+             (gc_timestamp && gc_timestamp < mtime //created later than the specified timestamp
                || !gc_timestamp && current_ts < mtime + MAX_TIMEOUT) ){
           evt.Counter++; evt.Batch--; //still within a valid window
           if (evt.Batch === 0) {

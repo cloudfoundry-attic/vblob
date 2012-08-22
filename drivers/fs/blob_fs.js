@@ -16,6 +16,7 @@ var GC_FOLDER = "~gc";
 var ENUM_FOLDER = "~enum";
 var MAX_COPY_RETRY = 3;
 var MAX_READ_RETRY = 3;
+var MAX_DEL_RETRY = 6;
 var openssl_available = false; //by default do not use openssl to calculate md5
 var gc_hash = {}; //for caching gc info;
 var enum_cache = {};
@@ -104,7 +105,7 @@ function start_collector(option,fb)
           }
         } );
     }, ec_interval);
-  
+
 }
 
 function start_gc(option,fb)
@@ -149,7 +150,7 @@ function start_gc(option,fb)
   fb.gcfcid = setInterval(function() {
     if (gcfc_status === 1 || gc_hash === null || Object.keys(gc_hash).length === 0) return; //optimization to avoid empty loop
     gcfc_status = 1;
-    var tmp_fn = "/tmp/gcfc-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000);
+    var tmp_fn = "/tmp/gcfc-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
     var tmp_hash = gc_hash;
     gc_hash = null;
     gc_hash = {};
@@ -223,7 +224,7 @@ function start_quota_gathering(fb)
     evt.on("Get Usage",function (dir_name, idx) {
       fs.readFile(fb.root_path+"/"+dir_name+"/~enum/quota", function(err,data) {
           if (err) { obj_count[idx] = null; used_quota[idx] = null; } else
-          { var obj = JSON.parse(data); obj_count[idx] = parseInt(obj.count,10); used_quota[idx] = parseInt(obj.storage,10); }
+          { try { var obj = JSON.parse(data); obj_count[idx] = parseInt(obj.count,10); used_quota[idx] = parseInt(obj.storage,10); } catch (e) { obj_count[idx] = null; used_quota[idx] = null; } }
           counter--; if (counter === 0) { evt.emit("Start Aggregate"); }
       });
     });
@@ -247,7 +248,7 @@ function FS_blob(option,callback)  //fow now no encryption for fs
   var this1 = this;
   this.root_path = option.root; //check if path exists here
   this.logger = option.logger;
-  if (option.quota) { this.quota = parseInt(option.quota,10); this.used_quota = 0; } 
+  if (option.quota) { this.quota = parseInt(option.quota,10); this.used_quota = 0; }
   else {this.quota = 100 * 1024 * 1024; this.used_quota=0;} //default 100MB
   if (option.obj_limit) { this.obj_limit = parseInt(option.obj_limit, 10); this.obj_count = 0; }
   else {this.obj_limit=10000; this.obj_count=0;} //default 10,000 objects
@@ -262,7 +263,7 @@ function FS_blob(option,callback)  //fow now no encryption for fs
         return;
       }
     }
-  } 
+  }
   fs.stat(this1.root_path, function(err,stats) {
     if (!err) {
       start_gc(option,this1);
@@ -367,8 +368,8 @@ FS_blob.prototype.container_delete = function(container_name,callback,fb)
   }
   var fn1,fn2;
   var da = new Date().valueOf();
-  fn1 = '/tmp/find1-'+da+Math.floor(Math.random() * 10000);
-  fn2 = '/tmp/find2-'+da+Math.floor(Math.random() * 10000);
+  fn1 = '/tmp/find1-'+da+"-"+Math.floor(Math.random() * 10000)+"-"+Math.floor(Math.random()*10000);
+  fn2 = '/tmp/find2-'+da+"-"+Math.floor(Math.random() * 10000)+"-"+Math.floor(Math.random()*10000);
   var child1 = exec('find '+c_path+"/*/* -type d -empty > "+fn1, function(error,stdout,stderr) {
       var child2 = exec('find '+c_path+"/*/* -type d > "+fn2, function(error,stdout,stderr) {
         var child3 =  exec('diff -q '+fn1+" "+fn2, function(error,stdout,stderr) {
@@ -386,8 +387,10 @@ FS_blob.prototype.container_delete = function(container_name,callback,fb)
             resp_code = resp.resp_code; resp_header = resp.resp_header; resp_body = resp.resp_body;
             callback(resp_code, resp_header, resp_body, null);
           }
-          fs.unlink(fn1,function(err) {} );
-          fs.unlink(fn2,function(err) {} );
+          var retry_cnt=0;
+          while (retry_cnt < MAX_DEL_RETRY) { try { fs.unlinkSync(fn1); } catch (e) {} ; retry_cnt++; }
+          retry_cnt=0;
+          while (retry_cnt < MAX_DEL_RETRY) { try { fs.unlinkSync(fn2); } catch (e) {} ; retry_cnt++; }
         });
    });
   });
@@ -588,7 +591,7 @@ FS_blob.prototype.file_create = function (container_name,filename,create_options
     //step 5 starting to re-link meta
     fb.file_create_meta(container_name,filename,temp_path,opts,callback,fb,!data.connection);
   };
-  
+
   stream.once("close", function() {
     if (upload_failed) {
       if (resp !== null) {
@@ -936,10 +939,10 @@ FS_blob.prototype.file_read = function (container_name, filename, options, callb
       //link is atomic, but re-link is two-step; re-query once to reduce the false negative rate
       if (!retry_cnt) retry_cnt = 0;
       if (retry_cnt < MAX_READ_RETRY) {
-        setTimeout(function(fb1) { fb1.file_read(container_name, filename, options, callback,fb1, retry_cnt+1); }, Math.floor(Math.random()*1000) + 100,fb); 
+        setTimeout(function(fb1) { fb1.file_read(container_name, filename, options, callback,fb1, retry_cnt+1); }, Math.floor(Math.random()*1000) + 100,fb);
         return;
       }
-      error_msg(404,"NoSuchFile",err,resp); callback(resp.resp_code, resp.resp_header, resp.resp_body, null); return; 
+      error_msg(404,"NoSuchFile",err,resp); callback(resp.resp_code, resp.resp_header, resp.resp_body, null); return;
     }
     var obj = JSON.parse(data);
     var header = common_header();
@@ -968,7 +971,7 @@ FS_blob.prototype.file_read = function (container_name, filename, options, callb
         etag_none_match && etag_none_match === obj.vblob_file_etag)
     {
       error_msg(304,'NotModified','The object is not modified',resp);
-      resp.resp_header.etag = obj.vblob_file_etag; resp.resp_header["last-modified"] = obj.vblob_update_time; 
+      resp.resp_header.etag = obj.vblob_file_etag; resp.resp_header["last-modified"] = obj.vblob_update_time;
       callback(resp.resp_code, resp.resp_header, /*resp.resp_body*/ null, null); //304 should not have body
       return;
     }
@@ -1023,7 +1026,7 @@ FS_blob.prototype.file_read = function (container_name, filename, options, callb
         st.on('open', function(fd) {
           callback(resp_code, resp_header, null, st);
         });
-      } else { 
+      } else {
         if (range.start < 0 || range.start > range.end ||
             range.start > obj.vblob_file_size-1 || range.end > obj.vblob_file_size-1)
         {
@@ -1031,7 +1034,7 @@ FS_blob.prototype.file_read = function (container_name, filename, options, callb
           callback(resp.resp_code, resp.resp_header, null, null);
           return;
         }
-        callback(resp_code, resp_header, null, null); 
+        callback(resp_code, resp_header, null, null);
       }
     } else {
       resp_code = 200; resp_header = header;
@@ -1058,7 +1061,7 @@ function query_files(container_name, options, callback, fb)
   var keys = null;
   keys = enum_cache[container_name].keys;
   if (!keys) {
-    fb.logger.debug("sorting the file keys in container " + container_name);  
+    fb.logger.debug("sorting the file keys in container " + container_name);
     keys = Object.keys(enum_cache[container_name].tbl);
     keys = keys.sort();
     enum_cache[container_name].keys = keys;
@@ -1100,7 +1103,7 @@ function query_files(container_name, options, callback, fb)
   res_json["Prefix"] = options.prefix ? options.prefix : {};
   res_json["Marker"] = options.marker ? options.marker : {};
   res_json["MaxKeys"] = ""+limit;
-  if (options.delimiter) { 
+  if (options.delimiter) {
     res_json["Delimiter"] = options.delimiter;
   }
   var last_pref = null;
@@ -1125,7 +1128,7 @@ function query_files(container_name, options, callback, fb)
   }
   if (i >= limit && idx < idx2 && limit <= limit1) res_json["IsTruncated"] = 'true';
   else res_json["IsTruncated"] = 'false';
-  if (res_contents.length > 0) res_json["Contents"] =  res_contents; //files 
+  if (res_contents.length > 0) res_json["Contents"] =  res_contents; //files
   if (res_common_prefixes.length > 0) res_json["CommonPrefixes"] = res_common_prefixes; //folders
   var resp = {};
   resp.resp_code = 200; resp.resp_header = common_header(); resp.resp_body = {"ListBucketResult":res_json};
@@ -1155,7 +1158,7 @@ FS_blob.prototype.file_list = function(container_name, options, callback, fb)
       error_msg(500,'InternalError',e,resp);
       callback(resp.resp_code, resp.resp_header, resp.resp_body, null);
     }
-  } else query_files(container_name, options,callback,fb); 
+  } else query_files(container_name, options,callback,fb);
 }
 
 FS_blob.prototype.container_list = function()
