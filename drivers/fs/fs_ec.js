@@ -33,6 +33,15 @@ function get_key_fingerprint(filename)
 var MAX_TRIES = 5;
 var argv = process.argv;
 var root_path = argv[2];
+var tmp_path = '/tmp';
+for (var ii = 0; ii < argv.length; ii++) {
+  if (argv[ii] === '--tmp') {
+    if (ii+1 < argv.length) {
+      tmp_path = argv[ii+1];
+    }
+    break;
+  }
+}
 var buck = new events.EventEmitter();
 var containers = fs.readdirSync(root_path);
 console.log(containers);
@@ -57,7 +66,7 @@ buck.on('compact',function(buck_idx) {
       ver1 = ver1.substr(0,ver1.lastIndexOf('-')); //remove ts
       ivt_enum[ver1] = keys1[nIdx1];
     }
-    var temp_file = "/tmp/"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
+    var temp_file = tmp_path+"/"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
     var child = exec('find '+ enum_dir +"/ -type f -name \"delta-*\" >"+temp_file,
       function (error, stdout, stderr) {
         if (!error) {

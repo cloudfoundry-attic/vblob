@@ -79,6 +79,7 @@ NOTE: if no config.json file is found, the gateway will use the settings from `c
                     "root": "<pathname for storing blobs - default is `./fs_root` >",
                     "node_exepath": "<path to node executable - default is `node` >",
                     "collector" : <enable gc and enumeration - default is `true`, NOTE: must be limited to one instance >,
+                    "tmp_path" : "<path to a global tmp folder for storing runtime temp files, default is `/tmp` >",
                     "gc_exepath": "<path to gc js file, default is `drivers/fs/fs_gc.js` >",
                     "gc_interval": <ms per gc execution, default is `600,000` (10 min) >,
                     "gcfc_exepath": "<path to lightweight gc js file, default is `drivers/fs/fs_gcfc.js` >",

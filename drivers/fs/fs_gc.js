@@ -8,6 +8,15 @@ var exec = require('child_process').exec;
 var argv = process.argv;
 
 var gc_timestamp = null;
+var tmp_path = '/tmp';
+for (var ii = 0; ii < argv.length; ii++) {
+  if (argv[ii] === '--tmp') {
+    if (ii+1 < argv.length) {
+      tmp_path = argv[ii+1];
+    }
+    break;
+  }
+}
 for (var ii = 0; ii < argv.length; ii++) {
   if (argv[ii] === '--ts') {
     if (ii+1 < argv.length) {
@@ -75,7 +84,7 @@ buck.on('gc',function(buck_idx) {
       filename = filename.substr(0,filename.lastIndexOf('-')); //remove ts
       var prefix1 = filename.substr(0,PREFIX_LENGTH), prefix2 = filename.substr(PREFIX_LENGTH,PREFIX_LENGTH);
       var fdir_path = root_path + "/" + evt.Container + "/versions/" + prefix1 + "/" + prefix2;
-      var temp_file = "/tmp/gctmp-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
+      var temp_file = tmp_path+"/gctmp-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
       var child = exec('find '+ fdir_path +"/ -type f -name \""+filename+"-*\" >"+temp_file,
         function (error, stdout, stderr) {
           if (!error) {

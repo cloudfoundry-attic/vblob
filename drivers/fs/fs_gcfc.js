@@ -9,6 +9,15 @@ var argv = process.argv;
 
 var BATCH_NUM = 1;
 var root_path = argv[3];
+var tmp_path = '/tmp';
+for (var ii = 0; ii < argv.length; ii++) {
+  if (argv[ii] === '--tmp') {
+    if (ii+1 < argv.length) {
+      tmp_path = argv[ii+1];
+    }
+    break;
+  }
+}
 var PREFIX_LENGTH = 2;
 var MAX_TRIES = 5;
 var gc_hash = JSON.parse(fs.readFileSync(argv[2]));
@@ -40,7 +49,7 @@ buck.on('gc',function(buck_idx) {
         fs.unlink(trash_dir+"/"+gc_hash[containers[buck_idx]][filename].ver[xx], function(err) {} );
       var prefix1 = filename.substr(0,PREFIX_LENGTH), prefix2 = filename.substr(PREFIX_LENGTH,PREFIX_LENGTH);
       var fdir_path = root_path + "/" + evt.Container + "/versions/" + prefix1 + "/" + prefix2;
-      var temp_file = "/tmp/gcfctmp"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
+      var temp_file = tmp_path+"/gcfctmp"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
       var child = exec('find '+ fdir_path +"/ -type f -name \""+filename+"-*\" >"+temp_file,
         function (error, stdout, stderr) {
           if (!error) {

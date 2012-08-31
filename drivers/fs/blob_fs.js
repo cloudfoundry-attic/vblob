@@ -93,7 +93,8 @@ function start_collector(option,fb)
   fb.ecid = setInterval(function() {
     if (ec_status === 1) return; //already a gc process running
     ec_status = 1;
-    exec(node_exepath + " " + ec_exepath + " " + fb.root_path + " > /dev/null",
+    //node fs_ec.js <blob root> <global tmp>
+    exec(node_exepath + " " + ec_exepath + " " + fb.root_path + " --tmp " + fb.tmp_path + " > /dev/null",
         function(error,stdout, stderr) {
           ec_status = 0; //finished set to 0
           if (error || stderr) {
@@ -112,6 +113,7 @@ function start_gc(option,fb)
 {
   gc_hash = null; gc_hash = {};
   var gc_status = 0; //1 = started
+  var tmp_path = option.tmp_path ? option.tmp_path : "/tmp";
   var node_exepath = option.node_exepath ? option.node_exepath : process.execPath;
   var gc_exepath = option.gc_exepath ? option.gc_exepath : __dirname+"/fs_gc.js";
   var gcfc_exepath = option.gcfc_exepath ? option.gcfc_exepath : __dirname+"/fs_gcfc.js";
@@ -132,7 +134,7 @@ function start_gc(option,fb)
   fb.gcid = setInterval(function() {
     if (gc_status === 1) return; //already a gc process running
     gc_status = 1;
-    exec(node_exepath + " " + gc_exepath + " " + fb.root_path + " > /dev/null",
+    exec(node_exepath + " " + gc_exepath + " " + fb.root_path + " --tmp " + tmp_path + " > /dev/null",
         function(error,stdout, stderr) {
           gc_status = 0; //finished set to 0
           if (error || stderr) {
@@ -150,14 +152,14 @@ function start_gc(option,fb)
   fb.gcfcid = setInterval(function() {
     if (gcfc_status === 1 || gc_hash === null || Object.keys(gc_hash).length === 0) return; //optimization to avoid empty loop
     gcfc_status = 1;
-    var tmp_fn = "/tmp/gcfc-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
+    var tmp_fn = tmp_path+"/gcfc-"+new Date().valueOf()+"-"+Math.floor(Math.random()*10000)+"-"+Math.floor(Math.random()*10000);
     var tmp_hash = gc_hash;
     gc_hash = null;
     gc_hash = {};
     fs.writeFile(tmp_fn,JSON.stringify(tmp_hash), function(err) {
       tmp_hash = null;
       if (err) { gcfc_status = 0; return; }
-      exec(node_exepath + " " + gcfc_exepath + " " + tmp_fn + " " +fb.root_path + " > /dev/null",
+      exec(node_exepath + " " + gcfc_exepath + " " + tmp_fn + " " +fb.root_path + " --tmp " + tmp_path + " > /dev/null",
         function(error,stdout, stderr) {
           gcfc_status = 0; //finished set to 0
           if (error || stderr) {
@@ -247,6 +249,7 @@ function FS_blob(option,callback)  //fow now no encryption for fs
 {
   var this1 = this;
   this.root_path = option.root; //check if path exists here
+  this.tmp_path = option.tmp_path ? option.tmp_path : "/tmp";
   this.logger = option.logger;
   if (option.quota) { this.quota = parseInt(option.quota,10); this.used_quota = 0; }
   else {this.quota = 100 * 1024 * 1024; this.used_quota=0;} //default 100MB
@@ -368,8 +371,8 @@ FS_blob.prototype.container_delete = function(container_name,callback,fb)
   }
   var fn1,fn2;
   var da = new Date().valueOf();
-  fn1 = '/tmp/find1-'+da+"-"+Math.floor(Math.random() * 10000)+"-"+Math.floor(Math.random()*10000);
-  fn2 = '/tmp/find2-'+da+"-"+Math.floor(Math.random() * 10000)+"-"+Math.floor(Math.random()*10000);
+  fn1 = fb.tmp_path+'/find1-'+da+"-"+Math.floor(Math.random() * 10000)+"-"+Math.floor(Math.random()*10000);
+  fn2 = fb.tmp_path+'/find2-'+da+"-"+Math.floor(Math.random() * 10000)+"-"+Math.floor(Math.random()*10000);
   var child1 = exec('find '+c_path+"/*/* -type d -empty > "+fn1, function(error,stdout,stderr) {
       var child2 = exec('find '+c_path+"/*/* -type d > "+fn2, function(error,stdout,stderr) {
         var child3 =  exec('diff -q '+fn1+" "+fn2, function(error,stdout,stderr) {
