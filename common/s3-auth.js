@@ -32,7 +32,7 @@ var validate = function(keyID, secretID, method, targets, headers, signature){
     , md5 : content_md5
     , contentType: content_type
     , date: date
-    , resource: auth.canonicalizeResource((targets.container===undefined || targets.container === null)?'/':(targets.filename ?/* join('/', targets.container, targets.filename)*/ '/'+targets.container+'/'+targets.filename+utils.to_query_string(targets.query):join('/',targets.container)+utils.to_query_string(targets.query)))
+    , resource: auth.canonicalizeResource((targets.container===undefined || targets.container === null)?'/':(targets.filename ?/* join('/', targets.container, targets.filename)*/ '/'+targets.container+'/'+targets.filename+utils.to_query_string(targets.query):join('/',targets.container,'/')+utils.to_query_string(targets.query)))
     , contentType: content_type
     , amazonHeaders: auth.canonicalizeHeaders(headers)
   });
