@@ -79,6 +79,13 @@ module.exports.assertStatus = assertStatus = function(code) {
   };
 }
 
+module.exports.assertStatusNot = assertStatusNot = function(code) {
+  return function(err,res) {
+    console.log("status: " + res.statusCode);
+    assert.notEqual(res.statusCode,code);
+  };
+}
+
 module.exports.api = api = {
   get: function(path2, headers) {
     return function() {
