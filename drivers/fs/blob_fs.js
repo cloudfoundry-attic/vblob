@@ -669,7 +669,7 @@ FS_blob.prototype.file_create_meta = function (container_name, filename, temp_pa
     }
     fb.logger.debug( ("Created meta for file "+filename+" in container_name "+container_name));
     var header = common_header();
-    header.ETag = '"'+obj.vblob_file_etag+'"';
+    header.ETag = '"'+opt.vblob_file_etag+'"';
     resp.resp_code = 200; resp.resp_body = null;
     fb.logger.debug( ('is_copy: ' + is_copy));
     if (is_copy) {
